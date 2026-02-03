@@ -1,0 +1,15 @@
+pandas
+numpy
+matplotlib
+yfinance
+streamlit
+scikit-learn
+prophet
+pytest
+seaborn
+plotly
+jupyter
+ipykernel
+tensorflow
+openpyxl
+kaleido
