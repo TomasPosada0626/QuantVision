@@ -231,14 +231,20 @@ class AuthService:
                     first_name.strip(),
                     last_name.strip(),
                     self.hash_password(password),
-                    datetime.now().isoformat(),
+                    self._utcnow().isoformat(),
                 ),
             )
             conn.commit()
+            conn.close()
+            conn = None
             self._record_audit("register", username, True, "user registered")
             self.logger.info("register_success username=%s", username)
             return True, None
         except sqlite3.IntegrityError as exc:
+            if hasattr(conn, "rollback"):
+                conn.rollback()
+            conn.close()
+            conn = None
             msg = str(exc).lower()
             if "users.username" in msg:
                 self._record_audit("register", username, False, "username unavailable")
@@ -252,7 +258,8 @@ class AuthService:
             self.logger.exception("register_failed_data_conflict identifier=%s", username)
             return False, "Registration failed due to a data conflict. Please try again."
         finally:
-            conn.close()
+            if conn is not None:
+                conn.close()
 
     def authenticate_user_with_reason(self, user_or_email: str, password: str) -> Tuple[bool, str]:
         if self.is_locked_out(user_or_email):
