@@ -199,7 +199,7 @@ class AuthService:
     def is_username_available(self, username: str) -> bool:
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM users WHERE username=?", (username,))
+        cursor.execute("SELECT 1 FROM users WHERE username=?", (username.strip(),))
         result = cursor.fetchone()
         conn.close()
         return result is None
@@ -220,16 +220,21 @@ class AuthService:
         last_name: str,
         password: str,
     ) -> Tuple[bool, Optional[str]]:
+        username_clean = username.strip()
+        email_clean = email.strip().lower()
+        first_name_clean = first_name.strip()
+        last_name_clean = last_name.strip()
+
         conn = self.get_connection()
         cursor = conn.cursor()
         try:
             cursor.execute(
                 "INSERT INTO users (username, email, first_name, last_name, password, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                 (
-                    username.strip(),
-                    email.strip(),
-                    first_name.strip(),
-                    last_name.strip(),
+                    username_clean,
+                    email_clean,
+                    first_name_clean,
+                    last_name_clean,
                     self.hash_password(password),
                     self._utcnow().isoformat(),
                 ),
@@ -237,8 +242,8 @@ class AuthService:
             conn.commit()
             conn.close()
             conn = None
-            self._record_audit("register", username, True, "user registered")
-            self.logger.info("register_success username=%s", username)
+            self._record_audit("register", username_clean, True, "user registered")
+            self.logger.info("register_success username=%s", username_clean)
             return True, None
         except sqlite3.IntegrityError as exc:
             if hasattr(conn, "rollback"):
@@ -247,38 +252,40 @@ class AuthService:
             conn = None
             msg = str(exc).lower()
             if "users.username" in msg:
-                self._record_audit("register", username, False, "username unavailable")
-                self.logger.info("register_failed_username username=%s", username)
+                self._record_audit("register", username_clean, False, "username unavailable")
+                self.logger.info("register_failed_username username=%s", username_clean)
                 return False, "Username is not available."
             if "users.email" in msg:
-                self._record_audit("register", email, False, "email already exists")
-                self.logger.info("register_failed_email email=%s", email)
+                self._record_audit("register", email_clean, False, "email already exists")
+                self.logger.info("register_failed_email email=%s", email_clean)
                 return False, "Email is already registered. Try logging in."
-            self._record_audit("register", username, False, "data conflict")
-            self.logger.exception("register_failed_data_conflict identifier=%s", username)
+            self._record_audit("register", username_clean, False, "data conflict")
+            self.logger.exception("register_failed_data_conflict identifier=%s", username_clean)
             return False, "Registration failed due to a data conflict. Please try again."
         finally:
             if conn is not None:
                 conn.close()
 
     def authenticate_user_with_reason(self, user_or_email: str, password: str) -> Tuple[bool, str]:
-        if self.is_locked_out(user_or_email):
-            remaining = self._get_lockout_remaining_minutes(user_or_email)
-            self._record_audit("login", user_or_email, False, "account locked")
-            self.logger.warning("login_locked identifier=%s remaining=%s", user_or_email, remaining)
+        identifier = user_or_email.strip()
+        if self.is_locked_out(identifier):
+            remaining = self._get_lockout_remaining_minutes(identifier)
+            self._record_audit("login", identifier, False, "account locked")
+            self.logger.warning("login_locked identifier=%s remaining=%s", identifier, remaining)
             return False, f"Too many failed attempts. Try again in {remaining} minute(s)."
 
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT password FROM users WHERE username=? OR email=?", (user_or_email, user_or_email)
+            "SELECT password FROM users WHERE username=? OR lower(email)=lower(?)",
+            (identifier, identifier),
         )
         row = cursor.fetchone()
         if not row:
             conn.close()
-            self._register_failed_attempt(user_or_email)
-            self._record_audit("login", user_or_email, False, "unknown identifier")
-            self.logger.warning("login_unknown_identifier identifier=%s", user_or_email)
+            self._register_failed_attempt(identifier)
+            self._record_audit("login", identifier, False, "unknown identifier")
+            self.logger.warning("login_unknown_identifier identifier=%s", identifier)
             return False, "Invalid username/email or password."
 
         stored_hash = row[0]
@@ -286,26 +293,26 @@ class AuthService:
 
         if password_ok and not stored_hash.startswith("$2"):
             cursor.execute(
-                "UPDATE users SET password=? WHERE username=? OR email=?",
-                (self.hash_password(password), user_or_email, user_or_email),
+                "UPDATE users SET password=? WHERE username=? OR lower(email)=lower(?)",
+                (self.hash_password(password), identifier, identifier),
             )
             conn.commit()
 
         conn.close()
 
         if not password_ok:
-            self._register_failed_attempt(user_or_email)
-            if self.is_locked_out(user_or_email):
-                self._record_audit("login", user_or_email, False, "lockout threshold reached")
-                self.logger.warning("login_lockout_threshold identifier=%s", user_or_email)
+            self._register_failed_attempt(identifier)
+            if self.is_locked_out(identifier):
+                self._record_audit("login", identifier, False, "lockout threshold reached")
+                self.logger.warning("login_lockout_threshold identifier=%s", identifier)
                 return False, f"Too many failed attempts. Try again in {LOCKOUT_MINUTES} minute(s)."
-            self._record_audit("login", user_or_email, False, "invalid password")
-            self.logger.warning("login_invalid_password identifier=%s", user_or_email)
+            self._record_audit("login", identifier, False, "invalid password")
+            self.logger.warning("login_invalid_password identifier=%s", identifier)
             return False, "Invalid username/email or password."
 
-        self._clear_failed_attempts(user_or_email)
-        self._record_audit("login", user_or_email, True, "login successful")
-        self.logger.info("login_success identifier=%s", user_or_email)
+        self._clear_failed_attempts(identifier)
+        self._record_audit("login", identifier, True, "login successful")
+        self.logger.info("login_success identifier=%s", identifier)
         return True, ""
 
     def authenticate_user(self, user_or_email: str, password: str) -> bool:
@@ -313,10 +320,12 @@ class AuthService:
         return ok
 
     def get_username_by_identifier(self, user_or_email: str) -> Optional[str]:
+        identifier = user_or_email.strip()
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT username FROM users WHERE username=? OR email=?", (user_or_email, user_or_email)
+            "SELECT username FROM users WHERE username=? OR lower(email)=lower(?)",
+            (identifier, identifier),
         )
         row = cursor.fetchone()
         conn.close()
