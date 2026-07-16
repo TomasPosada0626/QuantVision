@@ -3,6 +3,28 @@ import streamlit as st
 from services.auth_service import AuthService
 
 
+def _get_remembered_identifier() -> str:
+    try:
+        return str(st.query_params.get("login_id", "")).strip()
+    except Exception:
+        return ""
+
+
+def _set_remembered_identifier(identifier: str) -> None:
+    try:
+        if identifier:
+            st.query_params["login_id"] = identifier
+        else:
+            params = dict(st.query_params)
+            params.pop("login_id", None)
+            st.query_params.clear()
+            for key, value in params.items():
+                st.query_params[key] = value
+    except Exception:
+        # Query param persistence is a convenience feature; auth must not depend on it.
+        return
+
+
 def render_login_panel(auth_service: AuthService) -> None:
     st.markdown(
         "<style>div[data-testid='column']:nth-of-type(2) {margin: auto;}</style>",
@@ -68,13 +90,23 @@ def render_login_panel(auth_service: AuthService) -> None:
         else:
             st.subheader("Login")
             st.caption("You can log in with username or email.")
-            user_or_email = st.text_input("Username or Email")
+            remembered_identifier = _get_remembered_identifier()
+            user_or_email = st.text_input("Username or Email", value=remembered_identifier)
             password = st.text_input("Password", type="password")
+            remember_identifier = st.checkbox(
+                "Remember username/email on this device",
+                value=bool(remembered_identifier),
+                help="Stores only the username/email in the URL for faster login. Password is never stored.",
+            )
             if st.button("Login"):
                 ok, message = auth_service.authenticate_user_with_reason(
                     user_or_email.strip(), password
                 )
                 if ok:
+                    if remember_identifier:
+                        _set_remembered_identifier(user_or_email.strip())
+                    else:
+                        _set_remembered_identifier("")
                     username = (
                         auth_service.get_username_by_identifier(user_or_email) or user_or_email
                     )
@@ -86,3 +118,8 @@ def render_login_panel(auth_service: AuthService) -> None:
                     st.rerun()
                 else:
                     st.error(message or "Invalid username/email or password.")
+                    if not auth_service.get_username_by_identifier(user_or_email):
+                        st.info(
+                            "No user found with that username/email in the active database. "
+                            "If you already registered, make sure you're in the same environment."
+                        )
