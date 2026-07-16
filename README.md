@@ -71,9 +71,10 @@ pytest.ini
 pyproject.toml
 .env.example
 RUNBOOK.md
+storage/
 ```
 
-Runtime artifacts (`users.db`, logs, cache files) are excluded from version control.
+Runtime artifacts (`users.db`, logs, cache files) are generated under `storage/` and excluded from version control.
 
 ## Quick Start (Windows PowerShell)
 
@@ -112,11 +113,11 @@ Note: `src/app.py` is excluded from coverage because it is Streamlit UI entrypoi
 
 GitHub Actions runs these jobs on every push/PR to `main`:
 
-- `test`: unit/integration tests + coverage upload
+- `test`: unit/integration tests across Python 3.11 and 3.12 + coverage upload
 - `quality`: `ruff check` + `black --check`
 - `security`: `bandit` static analysis + `pip-audit` dependency scan
 
-Deployment validation runs automatically in a separate `CD` workflow after successful CI on `main`.
+Deployment validation runs automatically in a separate `CD` workflow after successful CI on `main`, including HTTP and content smoke checks.
 
 ## Optional Notebook Dependencies
 

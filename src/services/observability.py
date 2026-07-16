@@ -1,6 +1,8 @@
 import logging
 import os
 
+from config import APP_LOG_DIR
+
 
 def get_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
@@ -14,7 +16,7 @@ def get_logger(name: str) -> logging.Logger:
         datefmt="%Y-%m-%dT%H:%M:%S",
     )
 
-    logs_dir = "logs"
+    logs_dir = APP_LOG_DIR
     os.makedirs(logs_dir, exist_ok=True)
 
     file_handler = logging.FileHandler(os.path.join(logs_dir, "app.log"), encoding="utf-8")

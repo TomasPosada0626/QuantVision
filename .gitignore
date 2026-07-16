@@ -7,6 +7,8 @@ src/users.db
 logs/
 src/logs/
 *.log
+storage/
+!storage/.gitkeep
 
 # Python cache
 __pycache__/

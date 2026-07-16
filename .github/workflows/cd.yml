@@ -22,13 +22,17 @@ jobs:
         run: |
           set -e
           for i in 1 2 3 4 5; do
-            status=$(curl -L -s -o /dev/null -w "%{http_code}" "$APP_URL")
+            body_file=$(mktemp)
+            status=$(curl -L -s -o "$body_file" -w "%{http_code}" "$APP_URL")
             if [ "$status" = "200" ]; then
-              echo "App is healthy (HTTP 200)."
-              exit 0
+              if grep -Eq "Stock Anomaly Detector|streamlit" "$body_file"; then
+                echo "App is healthy (HTTP 200 + expected content)."
+                exit 0
+              fi
+              echo "HTTP 200 but content check failed."
             fi
             echo "Attempt $i failed with status $status, retrying..."
             sleep 10
           done
-          echo "Deployment health check failed."
+          echo "Deployment smoke test failed."
           exit 1

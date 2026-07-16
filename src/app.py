@@ -7,7 +7,7 @@ from datetime import datetime
 from sklearn.ensemble import IsolationForest
 from sklearn.cluster import DBSCAN
 from prophet import Prophet
-from config import SESSION_TTL_MINUTES
+from config import SESSION_TTL_MINUTES, USERS_DB_PATH
 from services.auth_service import AuthService
 from services.market_data_service import add_return_features, get_ticker_data
 from services.observability import get_logger
@@ -15,7 +15,7 @@ from ui.auth_ui import render_login_panel
 from ui.charts import build_anomaly_chart, build_price_chart
 
 logger = get_logger("app")
-auth_service = AuthService(db_path="users.db")
+auth_service = AuthService(db_path=USERS_DB_PATH)
 auth_service.initialize()
 logger.info("app_initialized")
 
