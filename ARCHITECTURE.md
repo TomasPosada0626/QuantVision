@@ -5,7 +5,8 @@
 This project is a single Streamlit application that combines UI and business logic in Python.
 
 - Frontend/UI layer: Streamlit components in `src/app.py`
-- Data access layer: Yahoo Finance download + local CSV cache
+- UI helper layer: auth and chart helpers in `src/ui/`
+- Data access layer: Yahoo Finance download + local CSV cache in `src/services/market_data_service.py`
 - Detection layer: statistical and ML methods
 - Service layer: authentication and session logic in `src/services/auth_service.py`
 - Persistence layer: local SQLite file (`users.db`) for user/session data
@@ -23,16 +24,27 @@ This project is a single Streamlit application that combines UI and business log
 
 - `src/app.py`: Streamlit app, controls, visualization orchestration.
 - `src/services/auth_service.py`: registration/login/session logic and SQLite persistence.
+- `src/services/market_data_service.py`: cached market data loading/downloading and return feature engineering.
+- `src/ui/auth_ui.py`: login/register panel rendering.
+- `src/ui/charts.py`: reusable Plotly chart builders.
 - `src/anomaly_methods.py`: reusable anomaly detection logic.
 - `src/utils.py`: utility helpers for processing.
 - `tests/test_anomaly_methods.py`: automated validation for anomaly algorithms.
 - `tests/test_auth_integration.py`: integration tests for registration and login flows.
+- `tests/test_market_data_service.py`: tests for cache/download/data-prep paths.
+- `tests/test_ui_charts.py`: tests for plotting helpers.
 
 ## Data Layout
 
 - `data/`: local historical CSV files.
 - `src/data/`: additional packaged sample data.
 - `users.db`: local SQLite database generated at runtime (excluded from git).
+
+## Security Model
+
+- Passwords are stored with bcrypt.
+- Legacy SHA-256 hashes are auto-upgraded to bcrypt on successful login.
+- CI includes static analysis (`bandit`) and dependency vulnerability checks (`pip-audit`).
 
 ## Deployment Topology
 

@@ -1,89 +1,21 @@
 import streamlit as st
 st.set_page_config(page_title="Stock Anomaly Detector", layout="wide")
-import os
 import pandas as pd
 import numpy as np
-import yfinance as yf
-import matplotlib.pyplot as plt
-import seaborn as sns
-import plotly.express as px
 from datetime import datetime
 from sklearn.ensemble import IsolationForest
 from sklearn.cluster import DBSCAN
 from prophet import Prophet
 from services.auth_service import AuthService
+from services.market_data_service import add_return_features, get_ticker_data
+from ui.auth_ui import render_login_panel
+from ui.charts import build_anomaly_chart, build_price_chart
 
 auth_service = AuthService(db_path='users.db')
 auth_service.initialize()
 
-# --- Login/Register Panel ---
-def login_panel():
-    st.markdown("<style>div[data-testid='column']:nth-of-type(2) {margin: auto;}</style>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1,2,1])
-    with col2:
-        st.markdown("<div style='text-align:center;'><h1>Login / Register</h1></div>", unsafe_allow_html=True)
-        option = st.radio('Choose action:', ['Login', 'Register'], horizontal=True)
-        if option == 'Register':
-            st.subheader('Register')
-            first_name = st.text_input('First Name')
-            last_name = st.text_input('Last Name')
-            username = st.text_input('Username')
-            username_status = st.empty()
-            if username:
-                if not auth_service.is_username_available(username):
-                    username_status.error('Username is not available.')
-                else:
-                    username_status.success('Username is available.')
-            email = st.text_input('Email')
-            email_status = st.empty()
-            if email.strip():
-                if not auth_service.is_email_available(email):
-                    email_status.error('Email is already registered.')
-                else:
-                    email_status.success('Email is available.')
-            password = st.text_input('Password', type='password')
-            password2 = st.text_input('Repeat Password', type='password')
-            if st.button('Register'):
-                required_fields = [first_name, last_name, username, email, password, password2]
-                if not all(field.strip() for field in required_fields):
-                    st.error('All fields are required.')
-                elif password != password2:
-                    st.error('Passwords do not match.')
-                elif not auth_service.is_strong_password(password):
-                    st.error('Password must be at least 8 characters, include uppercase, lowercase, number, and special character.')
-                elif not auth_service.is_username_available(username):
-                    st.error('Username is not available.')
-                elif not auth_service.is_email_available(email):
-                    st.error('Email is already registered. Try logging in.')
-                else:
-                    registered, register_error = auth_service.register_user(username, email, first_name, last_name, password)
-                    if registered:
-                        st.success('Registration successful! Please log in.')
-                        st.session_state['logged_in'] = False
-                        st.session_state['username'] = username
-                        st.session_state['login_mode'] = True
-                        st.rerun()
-                    else:
-                        st.error(register_error or 'Registration failed. Please try again.')
-        else:
-            st.subheader('Login')
-            user_or_email = st.text_input('Username or Email')
-            password = st.text_input('Password', type='password')
-            if st.button('Login'):
-                # Only check credentials, not password strength
-                if auth_service.authenticate_user(user_or_email, password):
-                    username = auth_service.get_username_by_identifier(user_or_email) or user_or_email
-                    session_id = auth_service.create_session(username)
-                    st.session_state['logged_in'] = True
-                    st.session_state['username'] = username
-                    st.session_state['session_id'] = session_id
-                    st.success(f'Login successful! Welcome, {username}.')
-                    st.rerun()
-                else:
-                    st.error('Invalid username/email or password.')
-
 if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
-    login_panel()
+    render_login_panel(auth_service)
     st.stop()
 
 # --- Main App Content ---
@@ -149,47 +81,27 @@ quantile_high = st.sidebar.slider("Upper Quantile", 0.8, 0.99, 0.95, 0.01)
 # --- Multi-ticker and method comparison ---
 if st.sidebar.button("Load Data"):
     data_dir = "data"
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
     results = {}
     if user_data is not None:
         # Use uploaded data as a custom ticker
         results["USER_CSV"] = user_data
     for ticker in tickers:
-        csv_path = os.path.join(data_dir, f"{ticker}_10y.csv")
-        df = pd.DataFrame()
-        need_download = True
-        if os.path.exists(csv_path):
-            try:
-                df = pd.read_csv(csv_path, index_col=0, header=[0,1], parse_dates=True)
-                if isinstance(df.columns, pd.MultiIndex):
-                    df = df.xs(ticker, axis=1, level=1)
-                    df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
-                # Check if data covers selected date range
-                if not df.empty:
-                    df_dates = pd.to_datetime(df.index)
-                    if df_dates.min() <= pd.to_datetime(start_date) and df_dates.max() >= pd.to_datetime(end_date):
-                        need_download = False
-            except Exception:
-                st.warning(f"Error reading cached data for {ticker}. Will re-download.")
-        if need_download:
-            with st.spinner(f"Downloading data for {ticker} from Yahoo Finance..."):
-                try:
-                    df = yf.download(ticker, start=start_date, end=end_date)
-                    if not df.empty:
-                        df.to_csv(csv_path)
-                        st.success(f"Data for {ticker} downloaded and saved.")
-                    else:
-                        st.error(f"No data found for {ticker} in selected date range.")
-                except Exception as e:
-                    st.error(f"Failed to download data for {ticker}: {e}")
+        try:
+            df, downloaded, warning_message = get_ticker_data(
+                ticker=ticker,
+                start_date=start_date,
+                end_date=end_date,
+                data_dir=data_dir,
+            )
+            if downloaded and not df.empty:
+                st.success(f"Data for {ticker} downloaded and saved.")
+            if warning_message:
+                st.warning(warning_message)
+        except Exception as e:
+            st.error(f"Failed to load data for {ticker}: {e}")
+            df = pd.DataFrame()
         if not df.empty:
-            # Ensure 'Close' is a Series, not DataFrame
-            close_col = df['Close']
-            if not isinstance(close_col, pd.Series):
-                close_col = close_col.squeeze()
-            df['Close'] = pd.to_numeric(close_col, errors='coerce')
-            df['Return'] = df['Close'].pct_change()
+            df = add_return_features(df)
             results[ticker] = df
         else:
             st.warning(f"No data for {ticker}.")
@@ -208,18 +120,7 @@ if st.sidebar.button("Load Data"):
             st.markdown("**Basic Statistics**")
             st.write(df.describe())
             st.markdown("**Price Trend**")
-            # Handle MultiIndex columns for 'Close'
-            close_col_name = 'Close'
-            if isinstance(df.columns, pd.MultiIndex):
-                for col in df.columns:
-                    if col[0] == 'Close':
-                        close_col_name = col
-                        break
-            y_data = df[close_col_name]
-            if hasattr(y_data, 'values') and len(y_data) == len(df.index):
-                fig1 = px.line(x=df.index, y=y_data, title=f'{ticker} Closing Price')
-            else:
-                fig1 = px.line(df, x=df.index, y='Close', title=f'{ticker} Closing Price')
+            fig1, y_data = build_price_chart(df, ticker)
             st.plotly_chart(fig1, width='stretch')
 
             st.header("Anomaly Detection")
@@ -268,19 +169,7 @@ if st.sidebar.button("Load Data"):
             for col, label in method_labels:
                 anomaly_df.loc[anomaly_df[col], 'Method'] = label
             pts = anomaly_df[anomaly_df['Method'] != 'None']
-            # Fix scatter plot for MultiIndex and length mismatch
-            scatter_close_col = 'Close'
-            if isinstance(pts.columns, pd.MultiIndex):
-                for col in pts.columns:
-                    if col[0] == 'Close':
-                        scatter_close_col = col
-                        break
-            y_pts = pts[scatter_close_col]
-            if hasattr(y_pts, 'values') and len(y_pts) == len(pts.index):
-                fig_final = px.scatter(x=pts.index, y=y_pts, color=pts['Method'], title="Anomalies Detected")
-            else:
-                fig_final = px.scatter(pts, x=pts.index, y='Close', color='Method', title="Anomalies Detected")
-            fig_final.add_scatter(x=df.index, y=y_data, mode='lines', name='Price', opacity=0.3)
+            fig_final = build_anomaly_chart(df, pts, y_data)
             st.plotly_chart(fig_final, width='stretch')
 
             # --- Export Plot as Image ---

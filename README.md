@@ -22,6 +22,8 @@ Professional anomaly detection app for historical stock prices using statistical
 - Prophet
 - Plotly, Matplotlib, Seaborn
 - Pytest
+- Ruff, Black, Bandit, pip-audit
+- bcrypt (password hashing)
 - SQLite
 
 ## Project Structure
@@ -33,9 +35,15 @@ src/
   utils.py
   services/
     auth_service.py
+    market_data_service.py
+  ui/
+    auth_ui.py
+    charts.py
 tests/
   test_anomaly_methods.py
   test_auth_integration.py
+  test_market_data_service.py
+  test_ui_charts.py
 notebooks/
   stock_anomaly_analysis.ipynb
   deep_learning_anomaly_case_studies.ipynb
@@ -50,6 +58,7 @@ DEPLOYMENT.md
 ARCHITECTURE.md
 CONTRIBUTING.md
 pytest.ini
+pyproject.toml
 ```
 
 Runtime artifacts (`users.db`, logs, cache files) are excluded from version control.
@@ -81,6 +90,14 @@ pytest --cov=src --cov-report=term-missing
 
 Note: `src/app.py` is excluded from coverage because it is Streamlit UI entrypoint code; coverage targets all testable service and algorithm modules.
 
+## Quality and Security Checks
+
+GitHub Actions runs these jobs on every push/PR to `main`:
+
+- `test`: unit/integration tests + coverage upload
+- `quality`: `ruff check` + `black --check`
+- `security`: `bandit` static analysis + `pip-audit` dependency scan
+
 ## Optional Notebook Dependencies
 
 The deployed app uses `requirements.txt`.
@@ -99,6 +116,7 @@ pip install -r requirements-notebooks.txt
 - Interactive anomaly visualization
 - Export plots as PNG (environment permitting)
 - Local user login and session management
+- Secure password hashing with bcrypt and legacy hash auto-upgrade
 
 ## Available Documentation
 
@@ -120,7 +138,7 @@ Documented (manual setup required):
 - Any Docker-compatible cloud platform
 
 Not yet implemented:
-- Automated CI/CD deploy pipeline
+- Automated deployment job (CD)
 
 ## Notes for Recruiters
 

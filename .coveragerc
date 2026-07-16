@@ -2,6 +2,7 @@
 source = src
 omit =
     src/app.py
+    src/ui/auth_ui.py
 
 [report]
 show_missing = True

@@ -1,3 +1,4 @@
+import hashlib
 import os
 import sqlite3
 import sys
@@ -96,7 +97,10 @@ def test_get_username_by_identifier_for_username_and_email(tmp_path) -> None:
 def test_password_strength_and_hash_behavior() -> None:
     assert AuthService.is_strong_password("Strong*Pass1") is not None
     assert AuthService.is_strong_password("weakpass") is None
-    assert AuthService.hash_password("abc") == AuthService.hash_password("abc")
+    hashed = AuthService.hash_password("abc")
+    assert hashed.startswith("$2")
+    assert AuthService.verify_password("abc", hashed) is True
+    assert AuthService.verify_password("wrong", hashed) is False
 
 
 def test_initialize_migrates_old_users_schema(tmp_path) -> None:
@@ -145,3 +149,25 @@ def test_register_user_handles_generic_integrity_error(monkeypatch, tmp_path) ->
 
     assert ok is False
     assert err == "Registration failed due to a data conflict. Please try again."
+
+
+def test_authenticate_upgrades_legacy_sha256_hash(tmp_path) -> None:
+    db_path = tmp_path / "legacy_auth.db"
+    auth = AuthService(str(db_path))
+    auth.initialize()
+
+    conn = sqlite3.connect(str(db_path))
+    legacy_hash = hashlib.sha256("Strong*Pass1".encode("utf-8")).hexdigest()
+    conn.execute(
+        "INSERT INTO users (username, email, first_name, last_name, password, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        ("legacyuser", "legacy@email.com", "L", "U", legacy_hash, "2026-01-01T00:00:00"),
+    )
+    conn.commit()
+    conn.close()
+
+    assert auth.authenticate_user("legacyuser", "Strong*Pass1") is True
+
+    conn = sqlite3.connect(str(db_path))
+    new_hash = conn.execute("SELECT password FROM users WHERE username='legacyuser'").fetchone()[0]
+    conn.close()
+    assert new_hash.startswith("$2")

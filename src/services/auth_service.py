@@ -1,9 +1,12 @@
 import hashlib
 import os
 import re
+import secrets
 import sqlite3
 from datetime import datetime
 from typing import Optional, Tuple
+
+import bcrypt
 
 
 class AuthService:
@@ -16,23 +19,19 @@ class AuthService:
     def create_tables(self) -> None:
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            '''CREATE TABLE IF NOT EXISTS users (
+        cursor.execute("""CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
                 email TEXT UNIQUE NOT NULL,
                 first_name TEXT NOT NULL,
                 last_name TEXT NOT NULL,
                 password TEXT NOT NULL,
                 created_at TEXT NOT NULL
-            )'''
-        )
-        cursor.execute(
-            '''CREATE TABLE IF NOT EXISTS sessions (
+            )""")
+        cursor.execute("""CREATE TABLE IF NOT EXISTS sessions (
                 session_id TEXT PRIMARY KEY,
                 username TEXT,
                 login_time TEXT
-            )'''
-        )
+            )""")
         conn.commit()
         conn.close()
 
@@ -43,18 +42,16 @@ class AuthService:
         columns = [col[1] for col in cursor.fetchall()]
         if "email" not in columns and columns:
             cursor.execute("ALTER TABLE users RENAME TO users_old")
-            cursor.execute(
-                '''CREATE TABLE users (
+            cursor.execute("""CREATE TABLE users (
                     username TEXT PRIMARY KEY,
                     email TEXT UNIQUE NOT NULL,
                     first_name TEXT NOT NULL,
                     last_name TEXT NOT NULL,
                     password TEXT NOT NULL,
                     created_at TEXT NOT NULL
-                )'''
-            )
+                )""")
             cursor.execute(
-                'INSERT INTO users (username, email, first_name, last_name, password, created_at) '
+                "INSERT INTO users (username, email, first_name, last_name, password, created_at) "
                 'SELECT username, "", "", "", password, created_at FROM users_old'
             )
             cursor.execute("DROP TABLE users_old")
@@ -68,7 +65,17 @@ class AuthService:
 
     @staticmethod
     def hash_password(password: str) -> str:
-        return hashlib.sha256(password.encode()).hexdigest()
+        return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+    @staticmethod
+    def _legacy_hash_password(password: str) -> str:
+        return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def verify_password(cls, password: str, stored_hash: str) -> bool:
+        if stored_hash.startswith("$2"):
+            return bcrypt.checkpw(password.encode("utf-8"), stored_hash.encode("utf-8"))
+        return cls._legacy_hash_password(password) == stored_hash
 
     @staticmethod
     def is_strong_password(password: str):
@@ -128,21 +135,40 @@ class AuthService:
     def authenticate_user(self, user_or_email: str, password: str) -> bool:
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT password FROM users WHERE username=? OR email=?", (user_or_email, user_or_email))
+        cursor.execute(
+            "SELECT password FROM users WHERE username=? OR email=?", (user_or_email, user_or_email)
+        )
         row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return False
+
+        stored_hash = row[0]
+        password_ok = self.verify_password(password, stored_hash)
+
+        if password_ok and not stored_hash.startswith("$2"):
+            # Upgrade legacy SHA-256 hash to bcrypt after successful login.
+            cursor.execute(
+                "UPDATE users SET password=? WHERE username=? OR email=?",
+                (self.hash_password(password), user_or_email, user_or_email),
+            )
+            conn.commit()
+
         conn.close()
-        return bool(row and row[0] == self.hash_password(password))
+        return password_ok
 
     def get_username_by_identifier(self, user_or_email: str) -> Optional[str]:
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT username FROM users WHERE username=? OR email=?", (user_or_email, user_or_email))
+        cursor.execute(
+            "SELECT username FROM users WHERE username=? OR email=?", (user_or_email, user_or_email)
+        )
         row = cursor.fetchone()
         conn.close()
         return row[0] if row else None
 
     def create_session(self, username: str) -> str:
-        session_id = hashlib.sha256((username + str(datetime.now())).encode()).hexdigest()
+        session_id = secrets.token_hex(32)
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute(

@@ -13,3 +13,4 @@ jupyter
 ipykernel
 openpyxl
 kaleido
+bcrypt
