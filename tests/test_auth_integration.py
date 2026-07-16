@@ -173,6 +173,124 @@ def test_register_user_handles_generic_integrity_error(monkeypatch, tmp_path) ->
     assert err == "Registration failed due to a data conflict. Please try again."
 
 
+def test_register_user_integrity_error_recheck_username_conflict(monkeypatch, tmp_path) -> None:
+    class FakeCursor:
+        def __init__(self):
+            self.username_select_calls = 0
+            self.email_select_calls = 0
+            self.last_query = ""
+
+        def execute(self, query, params):
+            if query.startswith("SELECT 1 FROM users WHERE username"):
+                self.username_select_calls += 1
+                self.last_query = "username"
+                return None
+
+            if query.startswith("SELECT 1 FROM users WHERE lower(email)=lower"):
+                self.email_select_calls += 1
+                self.last_query = "email"
+                return None
+
+            if query.startswith("INSERT INTO users"):
+                self.last_query = "insert"
+                raise sqlite3.IntegrityError("forced insert conflict")
+
+            return None
+
+        def fetchone(self):
+            if self.last_query == "username":
+                if self.username_select_calls == 1:
+                    return None
+                return (1,)
+            if self.last_query == "email":
+                return None
+            return None
+
+    class FakeConnection:
+        def __init__(self):
+            self.cursor_obj = FakeCursor()
+
+        def cursor(self):
+            return self.cursor_obj
+
+        def rollback(self):
+            return None
+
+        def close(self):
+            return None
+
+        def commit(self):
+            return None
+
+    db_path = tmp_path / "test_users.db"
+    auth = AuthService(str(db_path))
+    monkeypatch.setattr(auth, "get_connection", lambda: FakeConnection())
+
+    ok, err = auth.register_user("u", "e@e.com", "F", "L", "Strong*Pass1")
+
+    assert ok is False
+    assert err == "Username is not available."
+
+
+def test_register_user_integrity_error_recheck_email_conflict(monkeypatch, tmp_path) -> None:
+    class FakeCursor:
+        def __init__(self):
+            self.username_select_calls = 0
+            self.email_select_calls = 0
+            self.last_query = ""
+
+        def execute(self, query, params):
+            if query.startswith("SELECT 1 FROM users WHERE username"):
+                self.username_select_calls += 1
+                self.last_query = "username"
+                return None
+
+            if query.startswith("SELECT 1 FROM users WHERE lower(email)=lower"):
+                self.email_select_calls += 1
+                self.last_query = "email"
+                return None
+
+            if query.startswith("INSERT INTO users"):
+                self.last_query = "insert"
+                raise sqlite3.IntegrityError("forced insert conflict")
+
+            return None
+
+        def fetchone(self):
+            if self.last_query == "username":
+                return None
+            if self.last_query == "email":
+                if self.email_select_calls == 1:
+                    return None
+                return (1,)
+            return None
+
+    class FakeConnection:
+        def __init__(self):
+            self.cursor_obj = FakeCursor()
+
+        def cursor(self):
+            return self.cursor_obj
+
+        def rollback(self):
+            return None
+
+        def close(self):
+            return None
+
+        def commit(self):
+            return None
+
+    db_path = tmp_path / "test_users.db"
+    auth = AuthService(str(db_path))
+    monkeypatch.setattr(auth, "get_connection", lambda: FakeConnection())
+
+    ok, err = auth.register_user("u", "e@e.com", "F", "L", "Strong*Pass1")
+
+    assert ok is False
+    assert err == "Email is already registered. Try logging in."
+
+
 def test_authenticate_upgrades_legacy_sha256_hash(tmp_path) -> None:
     db_path = tmp_path / "legacy_auth.db"
     auth = AuthService(str(db_path))
@@ -222,6 +340,17 @@ def test_invalid_login_includes_remaining_attempts_message(tmp_path) -> None:
     assert "Remaining attempts before lockout" in message
 
 
+def test_unknown_identifier_returns_invalid_credentials_message(tmp_path) -> None:
+    db_path = tmp_path / "unknown-user.db"
+    auth = AuthService(str(db_path))
+    auth.initialize()
+
+    ok, message = auth.authenticate_user_with_reason("nobody@nope.com", "Strong*Pass1")
+
+    assert ok is False
+    assert message == "Invalid username/email or password."
+
+
 def test_session_validity_and_invalidation(tmp_path) -> None:
     db_path = tmp_path / "session.db"
     auth = AuthService(str(db_path))
@@ -254,6 +383,22 @@ def test_expired_session_returns_invalid(tmp_path) -> None:
     conn.close()
 
     assert auth.is_session_valid("expired-session") is False
+
+
+def test_session_with_invalid_timestamp_returns_invalid(tmp_path) -> None:
+    db_path = tmp_path / "invalid-timestamp.db"
+    auth = AuthService(str(db_path))
+    auth.initialize()
+
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO sessions (session_id, username, login_time, expires_at) VALUES (?, ?, ?, ?)",
+        ("bad-session", "user", datetime.now(UTC).isoformat(), "not-a-timestamp"),
+    )
+    conn.commit()
+    conn.close()
+
+    assert auth.is_session_valid("bad-session") is False
 
 
 def test_audit_log_records_events(tmp_path) -> None:
