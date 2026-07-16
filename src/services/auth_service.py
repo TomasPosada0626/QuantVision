@@ -235,6 +235,7 @@ class AuthService:
         email_clean = email.strip().lower()
         first_name_clean = first_name.strip()
         last_name_clean = last_name.strip()
+        password_clean = password.strip()
 
         conn = self.get_connection()
         cursor = conn.cursor()
@@ -246,7 +247,7 @@ class AuthService:
                     email_clean,
                     first_name_clean,
                     last_name_clean,
-                    self.hash_password(password),
+                    self.hash_password(password_clean),
                     self._utcnow().isoformat(),
                 ),
             )
@@ -300,12 +301,20 @@ class AuthService:
             return False, "Invalid username/email or password."
 
         stored_hash = row[0]
-        password_ok = self.verify_password(password, stored_hash)
+        password_to_verify = password
+        password_ok = self.verify_password(password_to_verify, stored_hash)
+        if not password_ok:
+            stripped_password = password.strip()
+            if stripped_password != password:
+                # Accept accidental surrounding whitespace from browser autofill/copy-paste.
+                password_ok = self.verify_password(stripped_password, stored_hash)
+                if password_ok:
+                    password_to_verify = stripped_password
 
         if password_ok and not stored_hash.startswith("$2"):
             cursor.execute(
                 "UPDATE users SET password=? WHERE username=? OR lower(email)=lower(?)",
-                (self.hash_password(password), identifier, identifier),
+                (self.hash_password(password_to_verify), identifier, identifier),
             )
             conn.commit()
 

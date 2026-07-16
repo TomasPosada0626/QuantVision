@@ -53,6 +53,27 @@ def test_login_with_email_works(tmp_path) -> None:
     assert auth.authenticate_user("mailuser@email.com", "Strong*Pass1") is True
 
 
+def test_register_trims_password_and_login_with_trimmed_password(tmp_path) -> None:
+    db_path = tmp_path / "trimmed_register.db"
+    auth = AuthService(str(db_path))
+    auth.initialize()
+
+    ok, err = auth.register_user("trimuser", "trim@email.com", "T", "U", "  Strong*Pass1  ")
+    assert ok is True
+    assert err is None
+
+    assert auth.authenticate_user("trimuser", "Strong*Pass1") is True
+
+
+def test_login_accepts_password_with_surrounding_whitespace(tmp_path) -> None:
+    db_path = tmp_path / "trimmed_login.db"
+    auth = AuthService(str(db_path))
+    auth.initialize()
+
+    auth.register_user("spaceuser", "space@email.com", "S", "U", "Strong*Pass1")
+    assert auth.authenticate_user("spaceuser", "   Strong*Pass1   ") is True
+
+
 def test_session_creation_persists_row(tmp_path) -> None:
     db_path = tmp_path / "test_users.db"
     auth = AuthService(str(db_path))
