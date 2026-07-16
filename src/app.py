@@ -83,6 +83,14 @@ def is_username_available(username):
     conn.close()
     return result is None
 
+def is_email_available(email):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT 1 FROM users WHERE lower(email)=lower(?)', (email.strip(),))
+    result = c.fetchone()
+    conn.close()
+    return result is None
+
 def register_user(username, email, first_name, last_name, password):
     conn = get_connection()
     c = conn.cursor()
@@ -90,9 +98,14 @@ def register_user(username, email, first_name, last_name, password):
         c.execute('INSERT INTO users (username, email, first_name, last_name, password, created_at) VALUES (?, ?, ?, ?, ?, ?)',
                   (username.strip(), email.strip(), first_name.strip(), last_name.strip(), hash_password(password), datetime.now().isoformat()))
         conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        return False
+        return True, None
+    except sqlite3.IntegrityError as e:
+        msg = str(e).lower()
+        if 'users.username' in msg:
+            return False, 'Username is not available.'
+        if 'users.email' in msg:
+            return False, 'Email is already registered. Try logging in.'
+        return False, 'Registration failed due to a data conflict. Please try again.'
     finally:
         conn.close()
 
@@ -135,6 +148,12 @@ def login_panel():
                 else:
                     username_status.success('Username is available.')
             email = st.text_input('Email')
+            email_status = st.empty()
+            if email.strip():
+                if not is_email_available(email):
+                    email_status.error('Email is already registered.')
+                else:
+                    email_status.success('Email is available.')
             password = st.text_input('Password', type='password')
             password2 = st.text_input('Repeat Password', type='password')
             if st.button('Register'):
@@ -147,15 +166,18 @@ def login_panel():
                     st.error('Password must be at least 8 characters, include uppercase, lowercase, number, and special character.')
                 elif not is_username_available(username):
                     st.error('Username is not available.')
+                elif not is_email_available(email):
+                    st.error('Email is already registered. Try logging in.')
                 else:
-                    if register_user(username, email, first_name, last_name, password):
+                    registered, register_error = register_user(username, email, first_name, last_name, password)
+                    if registered:
                         st.success('Registration successful! Please log in.')
                         st.session_state['logged_in'] = False
                         st.session_state['username'] = username
                         st.session_state['login_mode'] = True
                         st.rerun()
                     else:
-                        st.error('Registration failed. Please try again.')
+                        st.error(register_error or 'Registration failed. Please try again.')
         else:
             st.subheader('Login')
             user_or_email = st.text_input('Username or Email')
