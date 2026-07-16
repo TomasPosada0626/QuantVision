@@ -189,6 +189,18 @@ def test_lockout_after_multiple_failed_attempts(tmp_path) -> None:
     assert "Too many failed attempts" in message
 
 
+def test_invalid_login_includes_remaining_attempts_message(tmp_path) -> None:
+    db_path = tmp_path / "remaining.db"
+    auth = AuthService(str(db_path))
+    auth.initialize()
+    auth.register_user("remuser", "rem@email.com", "R", "U", "Strong*Pass1")
+
+    ok, message = auth.authenticate_user_with_reason("remuser", "wrong-password")
+
+    assert ok is False
+    assert "Remaining attempts before lockout" in message
+
+
 def test_session_validity_and_invalidation(tmp_path) -> None:
     db_path = tmp_path / "session.db"
     auth = AuthService(str(db_path))

@@ -18,6 +18,7 @@ Live demo:
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [How to Use the App](#how-to-use-the-app)
+- [Quality Snapshot](#quality-snapshot)
 - [Testing, Quality, and Security](#testing-quality-and-security)
 - [Deployment](#deployment)
 - [Notebooks and Case Studies](#notebooks-and-case-studies)
@@ -156,11 +157,16 @@ Environment profiles:
 - [config/env/.env.production.example](config/env/.env.production.example)
 
 Main settings:
+- ENVIRONMENT (development by default, strict checks in production)
 - USERS_DB_PATH (default: storage/users.db)
 - APP_LOG_DIR (default: storage/logs)
 - SESSION_TTL_MINUTES
 - MAX_FAILED_LOGIN_ATTEMPTS
 - LOCKOUT_MINUTES
+
+Dependency reproducibility:
+- Runtime lock file: requirements.lock
+- E2E browser test dependencies: requirements-e2e.txt
 
 ## How to Use the App
 1. Open the app and register or log in.
@@ -173,6 +179,12 @@ Main settings:
    - anomaly chart overlays
    - method benchmark table
 6. Export results as CSV or PNG when needed.
+
+## Quality Snapshot
+- Unit/integration tests: 39 passing in latest local validation.
+- Coverage gate: >=95% in CI.
+- CI jobs: test, quality, security, e2e-smoke.
+- Security checks: bandit + pip-audit.
 
 ## Testing, Quality, and Security
 Run test suite:
@@ -198,7 +210,15 @@ Run security checks:
 
 ```bash
 bandit -r src/services src/ui -ll
-pip-audit -r requirements.txt
+pip-audit -r requirements.lock
+```
+
+Run E2E Playwright smoke test (requires app URL running):
+
+```bash
+pip install -r requirements-e2e.txt
+python -m playwright install chromium
+pytest tests/e2e -q
 ```
 
 Optional task runner commands (from [Taskfile.yml](Taskfile.yml)):
@@ -208,7 +228,15 @@ task test
 task quality
 task coverage
 task security
+task e2e
 task run
+task demo:bootstrap
+```
+
+Bootstrap a demo user and sample data quickly:
+
+```bash
+python scripts/bootstrap_demo.py --with-data
 ```
 
 ## Deployment
@@ -223,7 +251,8 @@ Supported flows:
 
 CI/CD status:
 - CI validates tests, coverage threshold, lint, format, and security scans.
-- CD validates post-CI app health/smoke checks.
+- CI also validates an end-to-end Playwright smoke test on the Streamlit app startup.
+- CD validates post-CI app health/smoke checks against deployment.
 
 ## Notebooks and Case Studies
 - [notebooks/stock_anomaly_analysis.ipynb](notebooks/stock_anomaly_analysis.ipynb)

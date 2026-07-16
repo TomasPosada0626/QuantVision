@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Any
 
 from config import APP_LOG_DIR
 
@@ -29,3 +30,13 @@ def get_logger(name: str) -> logging.Logger:
     logger.addHandler(stream_handler)
     logger.propagate = False
     return logger
+
+
+def log_event(logger: logging.Logger, event: str, **fields: Any) -> None:
+    payload = " ".join(f"{k}={fields[k]}" for k in sorted(fields))
+    logger.info("event=%s %s", event, payload)
+
+
+def metric(logger: logging.Logger, name: str, value: int = 1, **tags: Any) -> None:
+    payload = " ".join(f"{k}={tags[k]}" for k in sorted(tags))
+    logger.info("metric=%s value=%s %s", name, value, payload)

@@ -14,7 +14,7 @@ from config import (
     SESSION_TTL_MINUTES,
     USERS_DB_PATH,
 )
-from services.observability import get_logger
+from services.observability import get_logger, metric
 
 
 class AuthService:
@@ -167,6 +167,7 @@ class AuthService:
         conn.commit()
         conn.close()
         self.logger.warning("failed_login identifier=%s count=%s", normalized, failed_count)
+        metric(self.logger, "auth_failed_login", identifier=normalized, failed_count=failed_count)
 
     def _clear_failed_attempts(self, identifier: str) -> None:
         conn = self.get_connection()
@@ -176,6 +177,16 @@ class AuthService:
         )
         conn.commit()
         conn.close()
+
+    def _remaining_attempts(self, identifier: str) -> int:
+        normalized = identifier.strip().lower()
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT failed_count FROM failed_logins WHERE identifier=?", (normalized,))
+        row = cursor.fetchone()
+        conn.close()
+        failed_count = row[0] if row else 0
+        return max(0, MAX_FAILED_LOGIN_ATTEMPTS - failed_count)
 
     @staticmethod
     def hash_password(password: str) -> str:
@@ -305,10 +316,15 @@ class AuthService:
             if self.is_locked_out(identifier):
                 self._record_audit("login", identifier, False, "lockout threshold reached")
                 self.logger.warning("login_lockout_threshold identifier=%s", identifier)
+                metric(self.logger, "auth_lockout", identifier=identifier)
                 return False, f"Too many failed attempts. Try again in {LOCKOUT_MINUTES} minute(s)."
             self._record_audit("login", identifier, False, "invalid password")
             self.logger.warning("login_invalid_password identifier=%s", identifier)
-            return False, "Invalid username/email or password."
+            remaining = self._remaining_attempts(identifier)
+            return (
+                False,
+                f"Invalid username/email or password. Remaining attempts before lockout: {remaining}.",
+            )
 
         self._clear_failed_attempts(identifier)
         self._record_audit("login", identifier, True, "login successful")

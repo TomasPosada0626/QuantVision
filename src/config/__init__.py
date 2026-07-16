@@ -1,5 +1,6 @@
 from .settings import (
     APP_LOG_DIR,
+    ENVIRONMENT,
     LOCKOUT_MINUTES,
     MAX_FAILED_LOGIN_ATTEMPTS,
     SESSION_TTL_MINUTES,
@@ -9,6 +10,7 @@ from .settings import (
 
 __all__ = [
     "APP_LOG_DIR",
+    "ENVIRONMENT",
     "LOCKOUT_MINUTES",
     "MAX_FAILED_LOGIN_ATTEMPTS",
     "SESSION_TTL_MINUTES",

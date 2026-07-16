@@ -6,7 +6,7 @@ tasks:
     cmds:
       - python -m venv .venv
       - ./.venv/Scripts/python -m pip install --upgrade pip
-      - ./.venv/Scripts/python -m pip install -r requirements.txt
+      - ./.venv/Scripts/python -m pip install -r requirements.lock
 
   run:
     desc: Start Streamlit app
@@ -21,14 +21,21 @@ tasks:
   quality:
     desc: Run lint and format checks
     cmds:
-      - ./.venv/Scripts/python -m ruff check src/services src/ui tests
-      - ./.venv/Scripts/python -m black --check src/services src/ui tests src/app.py
+      - ./.venv/Scripts/python -m ruff check src/services src/ui src/config tests
+      - ./.venv/Scripts/python -m black --check src/services src/ui src/config tests src/app.py
+
+  e2e:
+    desc: Run Playwright smoke test (requires app running on E2E_BASE_URL)
+    cmds:
+      - ./.venv/Scripts/python -m pip install -r requirements-e2e.txt
+      - ./.venv/Scripts/python -m playwright install chromium
+      - ./.venv/Scripts/python -m pytest tests/e2e -q
 
   security:
     desc: Run security scans
     cmds:
       - ./.venv/Scripts/python -m bandit -r src/services src/ui -ll
-      - ./.venv/Scripts/python -m pip_audit -r requirements.txt
+      - ./.venv/Scripts/python -m pip_audit -r requirements.lock
 
   coverage:
     desc: Run tests with coverage report
@@ -44,3 +51,8 @@ tasks:
     desc: Download all ticker csv files
     cmds:
       - ./.venv/Scripts/python scripts/download_all_tickers.py
+
+  demo:bootstrap:
+    desc: Create demo user and optionally preload sample data
+    cmds:
+      - ./.venv/Scripts/python scripts/bootstrap_demo.py --with-data

@@ -17,6 +17,7 @@ def render_login_panel(auth_service: AuthService) -> None:
         option = st.radio("Choose action:", ["Login", "Register"], horizontal=True)
         if option == "Register":
             st.subheader("Register")
+            st.caption("Tip: Email is case-insensitive. Username is case-sensitive.")
             first_name = st.text_input("First Name")
             last_name = st.text_input("Last Name")
             username = st.text_input("Username")
@@ -35,6 +36,9 @@ def render_login_panel(auth_service: AuthService) -> None:
                     email_status.success("Email is available.")
             password = st.text_input("Password", type="password")
             password2 = st.text_input("Repeat Password", type="password")
+            st.caption(
+                "Password must include uppercase, lowercase, number, special character, and 8+ length."
+            )
             if st.button("Register"):
                 required_fields = [first_name, last_name, username, email, password, password2]
                 if not all(field.strip() for field in required_fields):
@@ -63,10 +67,13 @@ def render_login_panel(auth_service: AuthService) -> None:
                         st.error(register_error or "Registration failed. Please try again.")
         else:
             st.subheader("Login")
+            st.caption("You can log in with username or email.")
             user_or_email = st.text_input("Username or Email")
             password = st.text_input("Password", type="password")
             if st.button("Login"):
-                ok, message = auth_service.authenticate_user_with_reason(user_or_email, password)
+                ok, message = auth_service.authenticate_user_with_reason(
+                    user_or_email.strip(), password
+                )
                 if ok:
                     username = (
                         auth_service.get_username_by_identifier(user_or_email) or user_or_email
