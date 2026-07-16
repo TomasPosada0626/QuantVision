@@ -6,7 +6,7 @@ tasks:
     cmds:
       - python -m venv .venv
       - ./.venv/Scripts/python -m pip install --upgrade pip
-      - ./.venv/Scripts/python -m pip install -r requirements.lock
+      - ./.venv/Scripts/python -m pip install -r requirements/lock.txt
 
   run:
     desc: Start Streamlit app
@@ -27,7 +27,7 @@ tasks:
   e2e:
     desc: Run Playwright smoke test (requires app running on E2E_BASE_URL)
     cmds:
-      - ./.venv/Scripts/python -m pip install -r requirements-e2e.txt
+      - ./.venv/Scripts/python -m pip install -r requirements/e2e.txt
       - ./.venv/Scripts/python -m playwright install chromium
       - ./.venv/Scripts/python -m pytest tests/e2e -q
 
@@ -35,7 +35,7 @@ tasks:
     desc: Run security scans
     cmds:
       - ./.venv/Scripts/python -m bandit -r src/services src/ui -ll
-      - ./.venv/Scripts/python -m pip_audit -r requirements.lock
+      - ./.venv/Scripts/python -m pip_audit -r requirements/lock.txt
 
   coverage:
     desc: Run tests with coverage report

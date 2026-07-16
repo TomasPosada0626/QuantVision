@@ -58,7 +58,7 @@ Notes:
 
 Important:
 - Keep app dependencies in `requirements.txt` only.
-- Deep-learning notebook dependencies are optional in `requirements-notebooks.txt` and should not be required for cloud app startup.
+- Deep-learning notebook dependencies are optional in `requirements/notebooks.txt` and should not be required for cloud app startup.
 - This repository pins cloud Python runtime in `runtime.txt`.
 
 ## 4. Generic Cloud (Docker-based)

@@ -165,8 +165,9 @@ Main settings:
 - LOCKOUT_MINUTES
 
 Dependency reproducibility:
-- Runtime lock file: requirements.lock
-- E2E browser test dependencies: requirements-e2e.txt
+- Runtime lock file: requirements/lock.txt
+- E2E browser test dependencies: requirements/e2e.txt
+- Optional notebook dependencies: requirements/notebooks.txt
 
 ## How to Use the App
 1. Open the app and register or log in.
@@ -210,13 +211,13 @@ Run security checks:
 
 ```bash
 bandit -r src/services src/ui -ll
-pip-audit -r requirements.lock
+pip-audit -r requirements/lock.txt
 ```
 
 Run E2E Playwright smoke test (requires app URL running):
 
 ```bash
-pip install -r requirements-e2e.txt
+pip install -r requirements/e2e.txt
 python -m playwright install chromium
 pytest tests/e2e -q
 ```

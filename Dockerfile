@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y build-essential libgl1-mesa-glx && rm -
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt ./
+COPY requirements/ ./requirements/
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy app source code
