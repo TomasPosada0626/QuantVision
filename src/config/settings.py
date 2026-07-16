@@ -1,6 +1,8 @@
 import os
+from pathlib import Path
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").strip().lower()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _int_env(name: str, default: int) -> int:
@@ -26,18 +28,25 @@ def _required_env(name: str) -> str:
     return value
 
 
+def _resolve_project_path(value: str) -> str:
+    path = Path(value)
+    if path.is_absolute():
+        return str(path)
+    return str((PROJECT_ROOT / path).resolve())
+
+
 SESSION_TTL_MINUTES = _positive("SESSION_TTL_MINUTES", _int_env("SESSION_TTL_MINUTES", 60))
 MAX_FAILED_LOGIN_ATTEMPTS = _positive(
     "MAX_FAILED_LOGIN_ATTEMPTS", _int_env("MAX_FAILED_LOGIN_ATTEMPTS", 5)
 )
 LOCKOUT_MINUTES = _positive("LOCKOUT_MINUTES", _int_env("LOCKOUT_MINUTES", 15))
-USERS_DB_PATH = os.getenv("USERS_DB_PATH", "storage/users.db")
-APP_LOG_DIR = os.getenv("APP_LOG_DIR", "storage/logs")
+USERS_DB_PATH = _resolve_project_path(os.getenv("USERS_DB_PATH", "storage/users.db"))
+APP_LOG_DIR = _resolve_project_path(os.getenv("APP_LOG_DIR", "storage/logs"))
 STREAMLIT_APP_URL = os.getenv(
     "STREAMLIT_APP_URL", "https://stock-anomaly-detector-tomas.streamlit.app/"
 )
 
 if ENVIRONMENT == "production":
-    USERS_DB_PATH = _required_env("USERS_DB_PATH")
-    APP_LOG_DIR = _required_env("APP_LOG_DIR")
+    USERS_DB_PATH = _resolve_project_path(_required_env("USERS_DB_PATH"))
+    APP_LOG_DIR = _resolve_project_path(_required_env("APP_LOG_DIR"))
     STREAMLIT_APP_URL = _required_env("STREAMLIT_APP_URL")

@@ -19,6 +19,19 @@ def test_default_environment_is_development(monkeypatch) -> None:
     assert settings.ENVIRONMENT == "development"
 
 
+def test_default_paths_are_absolute_and_rooted(monkeypatch) -> None:
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("USERS_DB_PATH", raising=False)
+    monkeypatch.delenv("APP_LOG_DIR", raising=False)
+
+    settings = importlib.import_module("config.settings")
+
+    assert Path(settings.USERS_DB_PATH).is_absolute()
+    assert Path(settings.APP_LOG_DIR).is_absolute()
+    assert settings.USERS_DB_PATH.endswith(str(Path("storage") / "users.db"))
+    assert settings.APP_LOG_DIR.endswith(str(Path("storage") / "logs"))
+
+
 def test_production_requires_critical_env(monkeypatch) -> None:
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.delenv("USERS_DB_PATH", raising=False)
@@ -39,6 +52,18 @@ def test_production_import_with_required_env(monkeypatch, tmp_path: Path) -> Non
 
     assert settings.ENVIRONMENT == "production"
     assert settings.USERS_DB_PATH.endswith("users.db")
+
+
+def test_production_relative_paths_are_resolved(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("USERS_DB_PATH", "storage/users.db")
+    monkeypatch.setenv("APP_LOG_DIR", "storage/logs")
+    monkeypatch.setenv("STREAMLIT_APP_URL", "https://example.com")
+
+    settings = importlib.import_module("config.settings")
+
+    assert Path(settings.USERS_DB_PATH).is_absolute()
+    assert Path(settings.APP_LOG_DIR).is_absolute()
 
 
 def test_invalid_int_env_uses_default(monkeypatch) -> None:
