@@ -132,15 +132,22 @@ jobs:
 
       - name: Start Streamlit app
         run: |
-          python -m streamlit run src/app.py --server.headless true --server.port 8501 > streamlit.log 2>&1 &
+          python -m streamlit run src/app.py --server.headless true --server.address 127.0.0.1 --server.port 8501 > streamlit.log 2>&1 &
+          started=0
           for i in {1..40}; do
             code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8501 || true)
             if [ "$code" = "200" ]; then
               echo "Streamlit started"
+              started=1
               break
             fi
             sleep 3
           done
+          if [ "$started" -ne 1 ]; then
+            echo "Streamlit did not start in time"
+            tail -n 200 streamlit.log || true
+            exit 1
+          fi
 
       - name: Run Playwright smoke tests
         env:

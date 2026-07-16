@@ -13,9 +13,18 @@ def test_login_page_smoke() -> None:
         browser = playwright.chromium.launch(headless=True)
         page = browser.new_page()
         page.goto(base_url, wait_until="domcontentloaded", timeout=120000)
-        page.wait_for_timeout(2500)
-        content = page.content().lower()
+        # Streamlit renders app text client-side; wait for body text to appear in CI.
+        page.wait_for_function(
+            """
+            () => {
+                const text = (document.body?.innerText || '').toLowerCase();
+                return text.includes('login') || text.includes('register') || text.includes('stock anomaly detector');
+            }
+            """,
+            timeout=120000,
+        )
+        content = (page.inner_text("body") or "").lower()
         browser.close()
 
-    assert "login" in content
-    assert "register" in content or "stock anomaly detector" in content
+    assert ("login" in content or "stock anomaly detector" in content)
+    assert ("register" in content or "stock anomaly detector" in content)
