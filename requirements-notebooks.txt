@@ -1,0 +1,7 @@
+# Optional dependencies for advanced deep-learning notebooks
+# Install only if you need notebook workflows with TensorFlow.
+# Streamlit Cloud deployment should use requirements.txt only.
+
+tensorflow
+jupyter
+ipykernel

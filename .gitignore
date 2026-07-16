@@ -1,0 +1,10 @@
+# Local runtime artifacts
+users.db
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environments
+.venv/
+venv/

@@ -10,6 +10,5 @@ seaborn
 plotly
 jupyter
 ipykernel
-tensorflow
 openpyxl
 kaleido
