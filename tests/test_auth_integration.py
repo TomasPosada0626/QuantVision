@@ -94,9 +94,10 @@ def test_session_creation_persists_row(tmp_path) -> None:
     auth.register_user("sessuser", "sess@email.com", "S", "U", "Strong*Pass1")
     session_id = auth.create_session("sessuser")
 
-    conn = sqlite3.connect(str(db_path))
-    row = conn.execute("SELECT username FROM sessions WHERE session_id=?", (session_id,)).fetchone()
-    conn.close()
+    with sqlite3.connect(str(db_path)) as conn:
+        row = conn.execute(
+            "SELECT username FROM sessions WHERE session_id=?", (session_id,)
+        ).fetchone()
 
     assert row is not None
     assert row[0] == "sessuser"
@@ -139,24 +140,24 @@ def test_password_strength_and_hash_behavior() -> None:
 
 def test_initialize_migrates_old_users_schema(tmp_path) -> None:
     db_path = tmp_path / "legacy.db"
-    conn = sqlite3.connect(str(db_path))
-    conn.execute(
-        "CREATE TABLE users (username TEXT PRIMARY KEY, password TEXT NOT NULL, created_at TEXT NOT NULL)"
-    )
-    conn.execute(
-        "INSERT INTO users (username, password, created_at) VALUES (?, ?, ?)",
-        ("legacy", "hashed", "2026-01-01T00:00:00"),
-    )
-    conn.commit()
-    conn.close()
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.execute(
+            "CREATE TABLE users (username TEXT PRIMARY KEY, password TEXT NOT NULL, created_at TEXT NOT NULL)"
+        )
+        conn.execute(
+            "INSERT INTO users (username, password, created_at) VALUES (?, ?, ?)",
+            ("legacy", "hashed", "2026-01-01T00:00:00"),
+        )
+        conn.commit()
 
     auth = AuthService(str(db_path))
     auth.initialize()
 
-    conn = sqlite3.connect(str(db_path))
-    cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
-    migrated = conn.execute("SELECT username, email FROM users WHERE username='legacy'").fetchone()
-    conn.close()
+    with sqlite3.connect(str(db_path)) as conn:
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+        migrated = conn.execute(
+            "SELECT username, email FROM users WHERE username='legacy'"
+        ).fetchone()
 
     assert "email" in cols
     assert migrated is not None
@@ -308,20 +309,27 @@ def test_authenticate_upgrades_legacy_sha256_hash(tmp_path) -> None:
     auth = AuthService(str(db_path))
     auth.initialize()
 
-    conn = sqlite3.connect(str(db_path))
-    legacy_hash = hashlib.sha256("Strong*Pass1".encode("utf-8")).hexdigest()
-    conn.execute(
-        "INSERT INTO users (username, email, first_name, last_name, password, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        ("legacyuser", "legacy@email.com", "L", "U", legacy_hash, "2026-01-01T00:00:00"),
-    )
-    conn.commit()
-    conn.close()
+    with sqlite3.connect(str(db_path)) as conn:
+        legacy_hash = hashlib.sha256("Strong*Pass1".encode("utf-8")).hexdigest()
+        conn.execute(
+            "INSERT INTO users (username, email, first_name, last_name, password, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                "legacyuser",
+                "legacy@email.com",
+                "L",
+                "U",
+                legacy_hash,
+                "2026-01-01T00:00:00",
+            ),
+        )
+        conn.commit()
 
     assert auth.authenticate_user("legacyuser", "Strong*Pass1") is True
 
-    conn = sqlite3.connect(str(db_path))
-    new_hash = conn.execute("SELECT password FROM users WHERE username='legacyuser'").fetchone()[0]
-    conn.close()
+    with sqlite3.connect(str(db_path)) as conn:
+        new_hash = conn.execute(
+            "SELECT password FROM users WHERE username='legacyuser'"
+        ).fetchone()[0]
     assert new_hash.startswith("$2")
 
 
@@ -381,18 +389,17 @@ def test_expired_session_returns_invalid(tmp_path) -> None:
     auth = AuthService(str(db_path))
     auth.initialize()
 
-    conn = sqlite3.connect(str(db_path))
-    conn.execute(
-        "INSERT INTO sessions (session_id, username, login_time, expires_at) VALUES (?, ?, ?, ?)",
-        (
-            "expired-session",
-            "user",
-            datetime.now(UTC).isoformat(),
-            (datetime.now(UTC) - timedelta(minutes=5)).isoformat(),
-        ),
-    )
-    conn.commit()
-    conn.close()
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.execute(
+            "INSERT INTO sessions (session_id, username, login_time, expires_at) VALUES (?, ?, ?, ?)",
+            (
+                "expired-session",
+                "user",
+                datetime.now(UTC).isoformat(),
+                (datetime.now(UTC) - timedelta(minutes=5)).isoformat(),
+            ),
+        )
+        conn.commit()
 
     assert auth.is_session_valid("expired-session") is False
 
@@ -402,13 +409,12 @@ def test_session_with_invalid_timestamp_returns_invalid(tmp_path) -> None:
     auth = AuthService(str(db_path))
     auth.initialize()
 
-    conn = sqlite3.connect(str(db_path))
-    conn.execute(
-        "INSERT INTO sessions (session_id, username, login_time, expires_at) VALUES (?, ?, ?, ?)",
-        ("bad-session", "user", datetime.now(UTC).isoformat(), "not-a-timestamp"),
-    )
-    conn.commit()
-    conn.close()
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.execute(
+            "INSERT INTO sessions (session_id, username, login_time, expires_at) VALUES (?, ?, ?, ?)",
+            ("bad-session", "user", datetime.now(UTC).isoformat(), "not-a-timestamp"),
+        )
+        conn.commit()
 
     assert auth.is_session_valid("bad-session") is False
 
@@ -421,9 +427,8 @@ def test_audit_log_records_events(tmp_path) -> None:
     auth.register_user("auduser", "aud@email.com", "A", "U", "Strong*Pass1")
     auth.authenticate_user_with_reason("auduser", "Strong*Pass1")
 
-    conn = sqlite3.connect(str(db_path))
-    rows = conn.execute("SELECT event_type, success FROM auth_audit").fetchall()
-    conn.close()
+    with sqlite3.connect(str(db_path)) as conn:
+        rows = conn.execute("SELECT event_type, success FROM auth_audit").fetchall()
 
     assert any(r[0] == "register" and r[1] == 1 for r in rows)
     assert any(r[0] == "login" and r[1] == 1 for r in rows)
@@ -448,18 +453,17 @@ def test_cleanup_expired_sessions_removes_old_rows(tmp_path) -> None:
     auth = AuthService(str(db_path))
     auth.initialize()
 
-    conn = sqlite3.connect(str(db_path))
-    conn.execute(
-        "INSERT INTO sessions (session_id, username, login_time, expires_at) VALUES (?, ?, ?, ?)",
-        (
-            "old-session",
-            "user",
-            datetime.now(UTC).isoformat(),
-            (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
-        ),
-    )
-    conn.commit()
-    conn.close()
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.execute(
+            "INSERT INTO sessions (session_id, username, login_time, expires_at) VALUES (?, ?, ?, ?)",
+            (
+                "old-session",
+                "user",
+                datetime.now(UTC).isoformat(),
+                (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+            ),
+        )
+        conn.commit()
 
     deleted = auth.cleanup_expired_sessions()
 

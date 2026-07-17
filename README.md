@@ -1,7 +1,18 @@
 ﻿# QuantVision
 
-[![CI](https://github.com/TomasPosada0626/QuantVision/actions/workflows/ci.yml/badge.svg)](https://github.com/TomasPosada0626/QuantVision/actions/workflows/ci.yml)
+[![CI](https://github.com/TomasPosada0626/QuantVision/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TomasPosada0626/QuantVision/actions/workflows/ci.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/TomasPosada0626/QuantVision/graph/badge.svg)](https://codecov.io/gh/TomasPosada0626/QuantVision)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-App-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-ORM-D71F00?logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
+[![Docker](https://img.shields.io/badge/Docker-Container-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![pytest](https://img.shields.io/badge/pytest-Tests-0A9EDC?logo=pytest&logoColor=white)](https://pytest.org/)
+[![Ruff](https://img.shields.io/badge/Ruff-Lint-46A6F7?logo=ruff&logoColor=white)](https://docs.astral.sh/ruff/)
+[![Black](https://img.shields.io/badge/Black-Formatter-000000?logo=python&logoColor=white)](https://black.readthedocs.io/)
+[![Bandit](https://img.shields.io/badge/Bandit-SAST-FE7A16)](https://bandit.readthedocs.io/)
+[![Playwright](https://img.shields.io/badge/Playwright-E2E-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/)
 
 **Intelligent Financial Analytics Platform**
 

@@ -68,7 +68,9 @@ SCHEDULER_MAX_CONSECUTIVE_FAILURES = _positive(
 SCHEDULER_HEARTBEAT_FILE = _resolve_project_path(
     os.getenv("SCHEDULER_HEARTBEAT_FILE", "storage/logs/scheduler_heartbeat.json")
 )
-STREAMLIT_APP_URL = os.getenv("STREAMLIT_APP_URL", "https://quantvision-tomas.streamlit.app/")
+STREAMLIT_APP_URL = os.getenv(
+    "STREAMLIT_APP_URL", "https://stock-anomaly-detector-tomas.streamlit.app/"
+)
 
 if ENVIRONMENT == "production":
     USERS_DB_PATH = _resolve_project_path(_required_env("USERS_DB_PATH"))
