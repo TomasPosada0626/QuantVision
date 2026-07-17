@@ -14,11 +14,11 @@
 [![Bandit](https://img.shields.io/badge/Bandit-SAST-FE7A16)](https://bandit.readthedocs.io/)
 [![Playwright](https://img.shields.io/badge/Playwright-E2E-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/)
 
-**Intelligent Financial Analytics Platform**
+**Financial Intelligence Platform for Market Analysis, Risk Analytics and Strategy Backtesting**
 
-QuantVision is a production-grade FinTech analytics platform built with Python and Streamlit.
-It provides anomaly detection, technical analysis, portfolio intelligence, risk analytics,
-alerts, and strategy backtesting in a modular architecture aligned with Clean Code and SOLID practices.
+QuantVision is a production-grade financial intelligence platform that combines quantitative analysis, machine learning, portfolio management, technical indicators and risk analytics into a unified experience for investors and financial analysts.
+
+Designed following enterprise-grade software engineering practices including Clean Architecture, SOLID principles, automated testing, CI/CD pipelines, secure authentication and production deployment.
 
 ## Live Demo
 - Application URL: https://stock-anomaly-detector-tomas.streamlit.app/
@@ -105,6 +105,19 @@ Design principles:
 - Risk analytics:
   - Sharpe, Sortino, Maximum Drawdown, Volatility, Beta, Alpha, Correlation, VaR.
 - FastAPI layer for health checks and portfolio/alerts endpoints.
+
+## News Intelligence
+- Yes, this is absolutely possible and highly recommended.
+- Trigger: when an anomaly is detected for a ticker, fetch same-day finance news for that company.
+- Goal: provide context for anomaly interpretation and faster analyst decision-making.
+- Example flow:
+  - Tesla anomaly detected
+  - News retrieval for TSLA (same day window)
+  - Context shown in UI, for example: "Tesla announces new autonomous driving release."
+- Initial implementation does not require AI:
+  - Integrate a financial news API and map by ticker/company.
+  - Suggested providers: Finnhub, Alpha Vantage News, MarketAux, NewsAPI (finance-filtered queries).
+  - Add service module (for example `src/services/news_service.py`) plus UI panel in dashboard/anomaly views.
 
 ## Use Cases
 - Buy-side technical analysis workflow.
