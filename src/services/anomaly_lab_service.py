@@ -30,6 +30,33 @@ def run_anomaly_methods(
     lof_neighbors: int,
     ocsvm_nu: float,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Run selected anomaly methods and return modeled outputs.
+
+    Args:
+        df: Input frame containing at least `Close` and `Return` columns.
+        selected_methods: Method names selected by the user.
+        zscore_threshold: Threshold for Z-Score detector.
+        iforest_contamination: Expected anomaly ratio for Isolation Forest/LOF.
+        dbscan_eps: Neighborhood radius for DBSCAN.
+        dbscan_min_samples: Minimum points per DBSCAN dense region.
+        rolling_window: Rolling window length for quantile method.
+        quantile_low: Lower quantile bound for rolling method.
+        quantile_high: Upper quantile bound for rolling method.
+        lof_neighbors: Number of neighbors for LOF.
+        ocsvm_nu: Expected anomaly bound for One-Class SVM.
+
+    Returns:
+        Tuple with:
+            - modeled frame containing anomaly columns per method,
+            - anomaly points frame (rows where any method flagged anomaly),
+            - benchmark frame with anomaly counts and runtimes.
+
+    Raises:
+        KeyError: If required columns are missing from `df`.
+    """
+    if "Close" not in df.columns or "Return" not in df.columns:
+        raise KeyError("df must include 'Close' and 'Return' columns")
+
     model_df = df.copy()
     comparisons: list[dict[str, float | str]] = []
     method_labels: list[tuple[str, str]] = []
