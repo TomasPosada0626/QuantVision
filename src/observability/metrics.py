@@ -1,38 +1,73 @@
 from __future__ import annotations
 
-from prometheus_client import Counter, Gauge, Histogram
+from typing import Callable, TypeVar, cast
 
-anomalies_detected_total = Counter(
+from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+
+_MetricT = TypeVar("_MetricT")
+
+
+def _get_or_create_metric(name: str, factory: Callable[[], _MetricT]) -> _MetricT:
+    """Return an existing metric when already registered in the process registry."""
+    try:
+        return factory()
+    except ValueError as exc:
+        if "Duplicated timeseries" not in str(exc):
+            raise
+        existing = getattr(REGISTRY, "_names_to_collectors", {}).get(name)
+        if existing is None:
+            raise
+        return cast(_MetricT, existing)
+
+anomalies_detected_total = _get_or_create_metric(
     "quantvision_anomalies_detected_total",
-    "Total anomalies detected",
-    ["method", "ticker"],
+    lambda: Counter(
+        "quantvision_anomalies_detected_total",
+        "Total anomalies detected",
+        ["method", "ticker"],
+    ),
 )
 
-logins_total = Counter(
+logins_total = _get_or_create_metric(
     "quantvision_logins_total",
-    "Total login attempts",
-    ["success"],
+    lambda: Counter(
+        "quantvision_logins_total",
+        "Total login attempts",
+        ["success"],
+    ),
 )
 
-anomaly_detection_duration = Histogram(
+anomaly_detection_duration = _get_or_create_metric(
     "quantvision_anomaly_detection_duration_seconds",
-    "Time to detect anomalies",
-    ["method"],
+    lambda: Histogram(
+        "quantvision_anomaly_detection_duration_seconds",
+        "Time to detect anomalies",
+        ["method"],
+    ),
 )
 
-active_sessions = Gauge(
+active_sessions = _get_or_create_metric(
     "quantvision_active_sessions",
-    "Number of active sessions",
+    lambda: Gauge(
+        "quantvision_active_sessions",
+        "Number of active sessions",
+    ),
 )
 
-trades_executed_total = Counter(
+trades_executed_total = _get_or_create_metric(
     "quantvision_trades_executed_total",
-    "Total simulated trades executed",
+    lambda: Counter(
+        "quantvision_trades_executed_total",
+        "Total simulated trades executed",
+    ),
 )
 
-scheduler_failures_total = Counter(
+scheduler_failures_total = _get_or_create_metric(
     "quantvision_scheduler_failures_total",
-    "Total scheduler failures",
+    lambda: Counter(
+        "quantvision_scheduler_failures_total",
+        "Total scheduler failures",
+    ),
 )
 
 
