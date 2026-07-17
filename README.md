@@ -58,6 +58,8 @@ Design principles:
 - Alert rules and alert history.
 - Scheduled alert evaluation service for recurring scans.
 - Backtesting engine with trade, win-rate, drawdown, and benchmark metrics.
+- Notebook-to-production strategy pipeline service.
+- Multi-factor portfolio optimization module.
 - Report center with PDF, CSV, and PNG exports.
 - Risk analytics:
   - Sharpe, Sortino, Maximum Drawdown, Volatility, Beta, Alpha, Correlation, VaR.
@@ -198,9 +200,9 @@ See:
 - `docs/operations/RUNBOOK.md`
 
 ## Roadmap
-- PostgreSQL option for enterprise data persistence.
-- Strategy research notebook-to-production pipeline.
-- Multi-factor portfolio optimization module.
+- Strategy governance policies (approval workflows, rollback controls).
+- Factor model monitoring and drift alerting.
+- Scenario-based stress optimization constraints.
 
 ## Benchmarks
 The anomaly lab includes method-level execution timing and anomaly counts,
