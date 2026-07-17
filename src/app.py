@@ -1,10 +1,12 @@
 # ruff: noqa: E402
 from __future__ import annotations
 
+import io
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 SRC_DIR = str(Path(__file__).resolve().parent)
@@ -29,11 +31,13 @@ from services.watchlist_service import WatchlistService
 from ui.auth_ui import render_login_panel
 from ui.data_loader import load_market_data, load_ticker_lazy
 from ui.pages import (
+    apply_app_theme,
     render_admin_page,
     render_ai_lab_page,
     render_alerts_page,
     render_analytics_dashboard_page,
     render_anomalies_page,
+    render_app_header,
     render_backtesting_page,
     render_comparison_page,
     render_dashboard_page,
@@ -74,45 +78,27 @@ def _is_valid_csrf(token: str) -> bool:
     return bool(verify_csrf_token(token, st.session_state))
 
 
-def _apply_theme() -> None:
-    st.markdown(
-        """
-        <style>
-            .stApp {
-                background: radial-gradient(circle at 15% 20%, #0f2237 0%, #070b14 45%, #03050a 100%);
-                color: #f5f8ff;
-            }
-            [data-testid="stMetricValue"] { color: #e7f0ff; }
-            div[data-testid="stSidebar"] {
-                background: linear-gradient(180deg, #0e1f32 0%, #08111f 100%);
-            }
-            .brand-title {
-                font-size: 2.1rem;
-                font-weight: 700;
-                letter-spacing: 0.04rem;
-                color: #9cc7ff;
-            }
-            .brand-subtitle {
-                color: #cddfff;
-                margin-top: -0.3rem;
-                margin-bottom: 1.0rem;
-            }
-        </style>
-        """,
-        unsafe_allow_html=True,
+@st.cache_data(show_spinner=False, ttl=60 * 30)
+def _cached_market_data(
+    tickers: tuple[str, ...],
+    start_date: date,
+    end_date: date,
+    uploaded_bytes: bytes | None,
+    username: str,
+    _event_tracker: EventTracker,
+) -> dict[str, pd.DataFrame]:
+    uploaded_file = io.BytesIO(uploaded_bytes) if uploaded_bytes else None
+    return load_market_data(
+        tickers=list(tickers),
+        start_date=start_date,
+        end_date=end_date,
+        uploaded_file=uploaded_file,
+        event_tracker=_event_tracker,
+        username=username,
     )
 
 
-def _render_header(username: str, role: str) -> None:
-    st.markdown('<div class="brand-title">QuantVision</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="brand-subtitle">Intelligent Financial Analytics Platform</div>',
-        unsafe_allow_html=True,
-    )
-    st.caption(f"Authenticated as {username} | Role: {role}")
-
-
-_apply_theme()
+apply_app_theme()
 
 if st.session_state.get("logged_in"):
     current_session_id = st.session_state.get("session_id", "")
@@ -143,7 +129,7 @@ username = st.session_state.get("username", "")
 if "role" not in st.session_state and username:
     st.session_state["role"] = auth_service.get_user_role(username)
 role = str(st.session_state.get("role", "ANALYST")).upper()
-_render_header(username, role)
+render_app_header(username, role)
 
 st.sidebar.markdown("## QuantVision")
 st.sidebar.caption("Intelligent Financial Analytics Platform")
@@ -194,13 +180,14 @@ params: dict[str, float] = {
 }
 
 if st.sidebar.button("Load / Refresh Market Data"):
-    st.session_state["market_data"] = load_market_data(
-        tickers=tickers,
+    uploaded_bytes = uploaded_file.getvalue() if uploaded_file is not None else None
+    st.session_state["market_data"] = _cached_market_data(
+        tickers=tuple(tickers),
         start_date=start_date,
         end_date=end_date,
-        uploaded_file=uploaded_file,
-        event_tracker=event_tracker,
+        uploaded_bytes=uploaded_bytes,
         username=username or "anonymous",
+        _event_tracker=event_tracker,
     )
 
 market_data = st.session_state.get("market_data", {})

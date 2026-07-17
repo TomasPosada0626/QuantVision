@@ -30,6 +30,46 @@ from ui.charts import (
 )
 
 
+def apply_app_theme() -> None:
+    """Apply global Streamlit visual theme for the QuantVision app shell."""
+    st.markdown(
+        """
+        <style>
+            .stApp {
+                background: radial-gradient(circle at 15% 20%, #0f2237 0%, #070b14 45%, #03050a 100%);
+                color: #f5f8ff;
+            }
+            [data-testid="stMetricValue"] { color: #e7f0ff; }
+            div[data-testid="stSidebar"] {
+                background: linear-gradient(180deg, #0e1f32 0%, #08111f 100%);
+            }
+            .brand-title {
+                font-size: 2.1rem;
+                font-weight: 700;
+                letter-spacing: 0.04rem;
+                color: #9cc7ff;
+            }
+            .brand-subtitle {
+                color: #cddfff;
+                margin-top: -0.3rem;
+                margin-bottom: 1.0rem;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_app_header(username: str, role: str) -> None:
+    """Render application brand header and user/session context."""
+    st.markdown('<div class="brand-title">QuantVision</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="brand-subtitle">Intelligent Financial Analytics Platform</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(f"Authenticated as {username} | Role: {role}")
+
+
 def render_dashboard_page(market_data: dict[str, pd.DataFrame], focus_ticker: str) -> None:
     st.subheader("Professional Market Dashboard")
     if focus_ticker not in market_data:
