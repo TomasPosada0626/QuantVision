@@ -171,13 +171,15 @@ class AuthService:
 
     def _get_lockout_remaining_minutes(self, identifier: str) -> int:
         conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT locked_until FROM failed_logins WHERE identifier=?",
-            (identifier.strip().lower(),),
-        )
-        row = cursor.fetchone()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT locked_until FROM failed_logins WHERE identifier=?",
+                (identifier.strip().lower(),),
+            )
+            row = cursor.fetchone()
+        finally:
+            conn.close()
         if not row or not row[0]:
             return 0
         try:
@@ -193,42 +195,51 @@ class AuthService:
     def _register_failed_attempt(self, identifier: str) -> None:
         normalized = identifier.strip().lower()
         now = self._utcnow()
+        failed_count = 0
         conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT failed_count FROM failed_logins WHERE identifier=?",
-            (normalized,),
-        )
-        row = cursor.fetchone()
-        failed_count = (row[0] if row else 0) + 1
-        locked_until = None
-        if failed_count >= MAX_FAILED_LOGIN_ATTEMPTS:
-            locked_until = (now + timedelta(minutes=LOCKOUT_MINUTES)).isoformat()
-        cursor.execute(
-            "INSERT OR REPLACE INTO failed_logins (identifier, failed_count, last_failed_at, locked_until) VALUES (?, ?, ?, ?)",
-            (normalized, failed_count, now.isoformat(), locked_until),
-        )
-        conn.commit()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT failed_count FROM failed_logins WHERE identifier=?",
+                (normalized,),
+            )
+            row = cursor.fetchone()
+            failed_count = (row[0] if row else 0) + 1
+            locked_until = None
+            if failed_count >= MAX_FAILED_LOGIN_ATTEMPTS:
+                locked_until = (now + timedelta(minutes=LOCKOUT_MINUTES)).isoformat()
+            cursor.execute(
+                "INSERT OR REPLACE INTO failed_logins (identifier, failed_count, last_failed_at, locked_until) VALUES (?, ?, ?, ?)",
+                (normalized, failed_count, now.isoformat(), locked_until),
+            )
+            conn.commit()
+        finally:
+            conn.close()
         self.logger.warning("failed_login identifier=%s count=%s", normalized, failed_count)
         metric(self.logger, "auth_failed_login", identifier=normalized, failed_count=failed_count)
 
     def _clear_failed_attempts(self, identifier: str) -> None:
         conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "DELETE FROM failed_logins WHERE identifier=?", (identifier.strip().lower(),)
-        )
-        conn.commit()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM failed_logins WHERE identifier=?", (identifier.strip().lower(),)
+            )
+            conn.commit()
+        finally:
+            conn.close()
 
     def _remaining_attempts(self, identifier: str) -> int:
         normalized = identifier.strip().lower()
         conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT failed_count FROM failed_logins WHERE identifier=?", (normalized,))
-        row = cursor.fetchone()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT failed_count FROM failed_logins WHERE identifier=?", (normalized,)
+            )
+            row = cursor.fetchone()
+        finally:
+            conn.close()
         failed_count = row[0] if row else 0
         return max(0, MAX_FAILED_LOGIN_ATTEMPTS - failed_count)
 
@@ -253,18 +264,22 @@ class AuthService:
 
     def is_username_available(self, username: str) -> bool:
         conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM users WHERE username=?", (username.strip(),))
-        result = cursor.fetchone()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM users WHERE username=?", (username.strip(),))
+            result = cursor.fetchone()
+        finally:
+            conn.close()
         return result is None
 
     def is_email_available(self, email: str) -> bool:
         conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM users WHERE lower(email)=lower(?)", (email.strip(),))
-        result = cursor.fetchone()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM users WHERE lower(email)=lower(?)", (email.strip(),))
+            result = cursor.fetchone()
+        finally:
+            conn.close()
         return result is None
 
     def register_user(
@@ -421,21 +436,25 @@ class AuthService:
     def get_username_by_identifier(self, user_or_email: str) -> Optional[str]:
         identifier = user_or_email.strip()
         conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT username FROM users WHERE username=? OR lower(email)=lower(?)",
-            (identifier, identifier),
-        )
-        row = cursor.fetchone()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT username FROM users WHERE username=? OR lower(email)=lower(?)",
+                (identifier, identifier),
+            )
+            row = cursor.fetchone()
+        finally:
+            conn.close()
         return row[0] if row else None
 
     def get_user_role(self, username: str) -> str:
         conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT role FROM users WHERE username=?", (username.strip(),))
-        row = cursor.fetchone()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT role FROM users WHERE username=?", (username.strip(),))
+            row = cursor.fetchone()
+        finally:
+            conn.close()
         role = (row[0] if row and row[0] else "ANALYST").upper()
         return role if role in ALLOWED_ROLES else "ANALYST"
 
@@ -507,6 +526,35 @@ class AuthService:
         except ValueError:
             return False
         return expires_at > self._utcnow()
+
+    def get_session_username(self, session_id: str) -> Optional[str]:
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT username, expires_at FROM sessions WHERE session_id=?",
+            (session_id,),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if not row:
+            return None
+        username = str(row[0]) if row[0] else ""
+        expires_at_raw = str(row[1]) if row[1] else ""
+        if not username or not expires_at_raw:
+            return None
+        try:
+            expires_at = datetime.fromisoformat(expires_at_raw)
+        except ValueError:
+            return None
+        if expires_at <= self._utcnow():
+            return None
+        return username
+
+    def validate_session_owner(self, session_id: str, username: str) -> bool:
+        if not session_id.strip() or not username.strip():
+            return False
+        session_username = self.get_session_username(session_id.strip())
+        return session_username == username.strip()
 
     def invalidate_session(self, session_id: str) -> None:
         conn = self.get_connection()

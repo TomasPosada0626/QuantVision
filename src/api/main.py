@@ -71,6 +71,11 @@ class AlertRuleCreate(BaseModel):
     active: bool = True
 
 
+class LoginRequest(BaseModel):
+    identifier: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=1, max_length=200)
+
+
 def create_app(
     auth_service: AuthService | None = None,
     portfolio_service: PortfolioService | None = None,
@@ -106,6 +111,38 @@ def create_app(
                 status_code=403, detail=f"forbidden: role cannot access {module_name}"
             )
 
+    def _require_authenticated_user(username: str, session_id: str) -> None:
+        validate_session_owner = getattr(auth, "validate_session_owner", None)
+        if callable(validate_session_owner):
+            if not validate_session_owner(session_id, username):
+                raise HTTPException(
+                    status_code=401, detail="unauthorized: invalid or expired session"
+                )
+
+    @_route("post", "/auth/login")
+    def login(payload: LoginRequest):
+        success, reason = auth.authenticate_user_with_reason(payload.identifier, payload.password)
+        if not success:
+            raise HTTPException(status_code=401, detail=reason or "invalid credentials")
+
+        username = auth.get_username_by_identifier(payload.identifier)
+        if not username:
+            raise HTTPException(status_code=401, detail="invalid credentials")
+
+        session_id = auth.create_session(username)
+        return {
+            "username": username,
+            "role": auth.get_user_role(username),
+            "session_id": session_id,
+        }
+
+    @_route("post", "/auth/logout")
+    def logout(session_id: str = ""):
+        if not session_id or not auth.is_session_valid(session_id):
+            raise HTTPException(status_code=401, detail="unauthorized: invalid or expired session")
+        auth.invalidate_session(session_id)
+        return {"logged_out": True}
+
     @_route("get", "/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "service": "quantvision-api"}
@@ -119,23 +156,31 @@ def create_app(
         return get_metrics_snapshot()
 
     @_route("get", "/users/{username}/role")
-    def user_role(username: str) -> dict[str, str]:
+    def user_role(username: str, session_id: str = "") -> dict[str, str]:
+        _require_authenticated_user(username, session_id)
         return {"username": username, "role": auth.get_user_role(username)}
 
     @_route("get", "/users/{username}/portfolio/summary")
-    def portfolio_summary(username: str, prices: str = "") -> dict[str, float]:
+    def portfolio_summary(
+        username: str, prices: str = "", session_id: str = ""
+    ) -> dict[str, float]:
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Portfolio")
         price_map = parse_prices(prices)
         return portfolio.compute_portfolio_metrics(username, latest_prices=price_map)
 
     @_route("get", "/users/{username}/portfolio/positions")
-    def portfolio_positions(username: str):
+    def portfolio_positions(username: str, session_id: str = ""):
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Portfolio")
         frame = portfolio.list_positions(username)
         return frame.to_dict(orient="records")
 
     @_route("post", "/users/{username}/portfolio/positions")
-    def portfolio_positions_create(username: str, payload: PortfolioPositionCreate):
+    def portfolio_positions_create(
+        username: str, payload: PortfolioPositionCreate, session_id: str = ""
+    ):
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Portfolio")
         position_id = portfolio.add_position(
             PositionInput(
@@ -149,13 +194,15 @@ def create_app(
         return {"id": int(position_id)}
 
     @_route("delete", "/users/{username}/portfolio/positions/{position_id}")
-    def portfolio_positions_delete(username: str, position_id: int):
+    def portfolio_positions_delete(username: str, position_id: int, session_id: str = ""):
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Portfolio")
         portfolio.remove_position(position_id=position_id, username=username)
         return {"deleted": True, "id": int(position_id)}
 
     @_route("get", "/users/{username}/alerts/history")
-    def alerts_history(username: str, limit: int = 100):
+    def alerts_history(username: str, limit: int = 100, session_id: str = ""):
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Alerts")
         if limit <= 0:
             raise HTTPException(status_code=400, detail="limit must be positive")
@@ -163,13 +210,15 @@ def create_app(
         return frame.to_dict(orient="records")
 
     @_route("get", "/users/{username}/alerts/rules")
-    def alerts_rules(username: str):
+    def alerts_rules(username: str, session_id: str = ""):
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Alerts")
         frame = alerts.list_rules(username)
         return frame.to_dict(orient="records")
 
     @_route("post", "/users/{username}/alerts/rules")
-    def alerts_rules_create(username: str, payload: AlertRuleCreate):
+    def alerts_rules_create(username: str, payload: AlertRuleCreate, session_id: str = ""):
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Alerts")
         rule_id = alerts.create_rule(
             AlertRule(
@@ -183,19 +232,22 @@ def create_app(
         return {"id": int(rule_id)}
 
     @_route("delete", "/users/{username}/alerts/rules/{rule_id}")
-    def alerts_rules_delete(username: str, rule_id: int):
+    def alerts_rules_delete(username: str, rule_id: int, session_id: str = ""):
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Alerts")
         alerts.delete_rule(rule_id=rule_id, username=username)
         return {"deleted": True, "id": int(rule_id)}
 
     @_route("get", "/users/{username}/watchlists")
-    def user_watchlists(username: str):
+    def user_watchlists(username: str, session_id: str = ""):
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Watchlists")
         frame = watchlists.list_watchlists(username)
         return frame.to_dict(orient="records")
 
     @_route("post", "/users/{username}/watchlists")
-    def user_watchlists_create(username: str, payload: WatchlistCreate):
+    def user_watchlists_create(username: str, payload: WatchlistCreate, session_id: str = ""):
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Watchlists")
         watchlist_id = watchlists.create_watchlist(
             WatchlistInput(username=username, name=payload.name)
@@ -203,13 +255,15 @@ def create_app(
         return {"id": int(watchlist_id)}
 
     @_route("delete", "/users/{username}/watchlists/{watchlist_id}")
-    def user_watchlists_delete(username: str, watchlist_id: int):
+    def user_watchlists_delete(username: str, watchlist_id: int, session_id: str = ""):
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Watchlists")
         watchlists.delete_watchlist(watchlist_id=watchlist_id, username=username)
         return {"deleted": True, "id": int(watchlist_id)}
 
     @_route("get", "/users/{username}/watchlists/{watchlist_id}/items")
-    def user_watchlist_items(username: str, watchlist_id: int):
+    def user_watchlist_items(username: str, watchlist_id: int, session_id: str = ""):
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Watchlists")
         existing = watchlists.list_watchlists(username)
         if watchlist_id not in existing.get("id", pd.Series(dtype=int)).tolist():
@@ -218,7 +272,13 @@ def create_app(
         return frame.to_dict(orient="records")
 
     @_route("post", "/users/{username}/watchlists/{watchlist_id}/items")
-    def user_watchlist_items_create(username: str, watchlist_id: int, payload: WatchlistItemCreate):
+    def user_watchlist_items_create(
+        username: str,
+        watchlist_id: int,
+        payload: WatchlistItemCreate,
+        session_id: str = "",
+    ):
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Watchlists")
         existing = watchlists.list_watchlists(username)
         if watchlist_id not in existing.get("id", pd.Series(dtype=int)).tolist():
@@ -227,7 +287,10 @@ def create_app(
         return {"added": True, "ticker": payload.ticker.upper()}
 
     @_route("delete", "/users/{username}/watchlists/{watchlist_id}/items/{ticker}")
-    def user_watchlist_items_delete(username: str, watchlist_id: int, ticker: str):
+    def user_watchlist_items_delete(
+        username: str, watchlist_id: int, ticker: str, session_id: str = ""
+    ):
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Watchlists")
         existing = watchlists.list_watchlists(username)
         if watchlist_id not in existing.get("id", pd.Series(dtype=int)).tolist():
@@ -291,7 +354,8 @@ def create_app(
         return result
 
     @_route("get", "/users/{username}/reports/portfolio")
-    def portfolio_report(username: str, prices: str = ""):
+    def portfolio_report(username: str, prices: str = "", session_id: str = ""):
+        _require_authenticated_user(username, session_id)
         _authorize_module(username, "Reports")
         summary = portfolio.compute_portfolio_metrics(username, latest_prices=parse_prices(prices))
         positions = portfolio.list_positions(username)

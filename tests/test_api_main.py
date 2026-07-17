@@ -63,6 +63,26 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
         def can_access_module(self, username: str, module_name: str) -> bool:
             return True
 
+        def validate_session_owner(self, session_id: str, username: str) -> bool:
+            return session_id == "valid-session" and username == "alice"
+
+        def authenticate_user_with_reason(self, identifier: str, password: str):
+            if identifier == "alice" and password == "Strong*Pass1":
+                return True, ""
+            return False, "Invalid username/email or password."
+
+        def get_username_by_identifier(self, identifier: str):
+            return "alice" if identifier == "alice" else None
+
+        def create_session(self, username: str) -> str:
+            return "valid-session"
+
+        def is_session_valid(self, session_id: str) -> bool:
+            return session_id == "valid-session"
+
+        def invalidate_session(self, session_id: str):
+            return None
+
     class FakePortfolio:
         def compute_portfolio_metrics(self, username: str, latest_prices):
             return {"Invested Capital": 100.0, "Current Value": 110.0, "PnL": 10.0, "ROI %": 10.0}
@@ -158,19 +178,40 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
     health = app.routes["/health"]()
     assert health["status"] == "ok"
 
-    role = app.routes["/users/{username}/role"]("alice")
+    denied_role = False
+    try:
+        app.routes["/users/{username}/role"]("alice")
+    except FakeHTTPException as exc:
+        denied_role = True
+        assert exc.status_code == 401
+    assert denied_role is True
+
+    role = app.routes["/users/{username}/role"]("alice", session_id="valid-session")
     assert role["role"] == "ANALYST"
 
-    summary = app.routes["/users/{username}/portfolio/summary"]("alice", prices="AAPL:100")
+    login_payload = type("LoginPayload", (), {"identifier": "alice", "password": "Strong*Pass1"})()
+    login_response = app.routes["POST /auth/login"](payload=login_payload)
+    assert login_response["session_id"] == "valid-session"
+
+    logout_response = app.routes["POST /auth/logout"](session_id="valid-session")
+    assert logout_response["logged_out"] is True
+
+    summary = app.routes["/users/{username}/portfolio/summary"](
+        "alice", prices="AAPL:100", session_id="valid-session"
+    )
     assert summary["PnL"] == 10.0
 
-    history = app.routes["/users/{username}/alerts/history"]("alice", limit=10)
+    history = app.routes["/users/{username}/alerts/history"](
+        "alice", limit=10, session_id="valid-session"
+    )
     assert len(history) == 1
 
-    watchlists = app.routes["/users/{username}/watchlists"]("alice")
+    watchlists = app.routes["/users/{username}/watchlists"]("alice", session_id="valid-session")
     assert len(watchlists) == 1
 
-    items = app.routes["/users/{username}/watchlists/{watchlist_id}/items"]("alice", watchlist_id=1)
+    items = app.routes["/users/{username}/watchlists/{watchlist_id}/items"](
+        "alice", watchlist_id=1, session_id="valid-session"
+    )
     assert len(items) == 2
 
     indicators = app.routes["/analytics/{ticker}/indicators"]("aapl")
@@ -182,10 +223,14 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
     backtest = app.routes["/analytics/{ticker}/backtest"]("aapl")
     assert "Return %" in backtest
 
-    report = app.routes["/users/{username}/reports/portfolio"]("alice", prices="AAPL:100")
+    report = app.routes["/users/{username}/reports/portfolio"](
+        "alice", prices="AAPL:100", session_id="valid-session"
+    )
     assert report["pdf_bytes"] == 3
 
-    positions = app.routes["/users/{username}/portfolio/positions"]("alice")
+    positions = app.routes["/users/{username}/portfolio/positions"](
+        "alice", session_id="valid-session"
+    )
     assert len(positions) == 1
 
     payload_position = type(
@@ -194,16 +239,16 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
         {"ticker": "AAPL", "quantity": 1.0, "buy_price": 100.0, "buy_date": "2026-01-01"},
     )()
     created_position = app.routes["POST /users/{username}/portfolio/positions"](
-        "alice", payload=payload_position
+        "alice", payload=payload_position, session_id="valid-session"
     )
     assert created_position["id"] == 99
 
     deleted_position = app.routes["DELETE /users/{username}/portfolio/positions/{position_id}"](
-        "alice", position_id=99
+        "alice", position_id=99, session_id="valid-session"
     )
     assert deleted_position["deleted"] is True
 
-    rules = app.routes["/users/{username}/alerts/rules"]("alice")
+    rules = app.routes["/users/{username}/alerts/rules"]("alice", session_id="valid-session")
     assert len(rules) == 1
 
     payload_rule = type(
@@ -211,21 +256,25 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
         (),
         {"ticker": "AAPL", "alert_type": "rsi_gt_70", "threshold": None, "active": True},
     )()
-    created_rule = app.routes["POST /users/{username}/alerts/rules"]("alice", payload=payload_rule)
+    created_rule = app.routes["POST /users/{username}/alerts/rules"](
+        "alice", payload=payload_rule, session_id="valid-session"
+    )
     assert created_rule["id"] == 5
 
-    deleted_rule = app.routes["DELETE /users/{username}/alerts/rules/{rule_id}"]("alice", rule_id=5)
+    deleted_rule = app.routes["DELETE /users/{username}/alerts/rules/{rule_id}"](
+        "alice", rule_id=5, session_id="valid-session"
+    )
     assert deleted_rule["deleted"] is True
 
     payload_watchlist = type("WatchlistPayload", (), {"name": "Tech"})()
     created_watchlist = app.routes["POST /users/{username}/watchlists"](
-        "alice", payload=payload_watchlist
+        "alice", payload=payload_watchlist, session_id="valid-session"
     )
     assert created_watchlist["id"] == 1
 
     payload_item = type("ItemPayload", (), {"ticker": "NVDA"})()
     added_item = app.routes["POST /users/{username}/watchlists/{watchlist_id}/items"](
-        "alice", watchlist_id=1, payload=payload_item
+        "alice", watchlist_id=1, payload=payload_item, session_id="valid-session"
     )
     assert added_item["added"] is True
 
@@ -233,6 +282,7 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
         "alice",
         watchlist_id=1,
         ticker="NVDA",
+        session_id="valid-session",
     )
     assert removed_item["deleted"] is True
 
@@ -244,7 +294,7 @@ def test_create_app_with_fake_fastapi_branch(monkeypatch) -> None:
 
     caught = False
     try:
-        app.routes["/users/{username}/alerts/history"]("alice", limit=0)
+        app.routes["/users/{username}/alerts/history"]("alice", limit=0, session_id="valid-session")
     except FakeHTTPException as exc:
         caught = True
         assert exc.status_code == 400
@@ -270,6 +320,9 @@ def test_create_app_forbidden_by_rbac(monkeypatch) -> None:
         def can_access_module(self, username: str, module_name: str) -> bool:
             return False
 
+        def validate_session_owner(self, session_id: str, username: str) -> bool:
+            return True
+
     class FakeHTTPException(Exception):
         def __init__(self, status_code: int, detail: str):
             super().__init__(detail)
@@ -281,7 +334,7 @@ def test_create_app_forbidden_by_rbac(monkeypatch) -> None:
     app = api_main.create_app(FakeAuth())
     denied = False
     try:
-        app.routes["/users/{username}/portfolio/summary"]("guest")
+        app.routes["/users/{username}/portfolio/summary"]("guest", session_id="valid")
     except FakeHTTPException as exc:
         denied = True
         assert exc.status_code == 403

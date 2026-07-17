@@ -53,6 +53,18 @@ def test_login_with_email_works(tmp_path) -> None:
     assert auth.authenticate_user("mailuser@email.com", "Strong*Pass1") is True
 
 
+def test_validate_session_owner(tmp_path) -> None:
+    db_path = tmp_path / "session_owner.db"
+    auth = AuthService(str(db_path))
+    auth.initialize()
+    auth.register_user("owneruser", "owner@email.com", "O", "U", "Strong*Pass1")
+
+    session_id = auth.create_session("owneruser")
+    assert auth.validate_session_owner(session_id, "owneruser") is True
+    assert auth.validate_session_owner(session_id, "otheruser") is False
+    assert auth.validate_session_owner("", "owneruser") is False
+
+
 def test_register_trims_password_and_login_with_trimmed_password(tmp_path) -> None:
     db_path = tmp_path / "trimmed_register.db"
     auth = AuthService(str(db_path))
