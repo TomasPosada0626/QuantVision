@@ -466,7 +466,18 @@ def render_ai_lab_page(
     cols[1].metric("Predicted Close", f"${prediction['predicted_close']:.2f}")
     cols[2].metric("Expected Change", f"{prediction['expected_change_pct']:.2f}%")
 
-    st.write("Drift", drift)
+    st.markdown("### Drift Monitoring")
+    drift_cols = st.columns(4)
+    drift_cols[0].metric("Recent Mean", f"{float(drift['recent_mean']):.6f}")
+    drift_cols[1].metric("Baseline Mean", f"{float(drift['baseline_mean']):.6f}")
+    drift_cols[2].metric("Baseline Std", f"{float(drift['baseline_std']):.6f}")
+    drift_cols[3].metric("Z-Score", f"{float(drift['z_score']):.3f}")
+
+    if bool(drift["drift_detected"]):
+        st.warning("Drift detected: recent distribution differs from baseline.")
+    else:
+        st.success("No significant drift detected.")
+
     event_tracker.track(
         AnalyticsEvent(
             username=username,
@@ -553,7 +564,35 @@ def render_analytics_dashboard_page(
 
     funnel = event_tracker.funnel()
     st.markdown("### Funnel")
-    st.json(funnel)
+    funnel_steps = [
+        "login_success",
+        "load_market_data",
+        "run_anomaly_methods",
+        "export_report",
+    ]
+    funnel_rows: list[dict[str, str | int | float]] = []
+    previous_count: int | None = None
+    for step in funnel_steps:
+        count = int(funnel.get(step, 0))
+        if previous_count is None:
+            conversion_from_previous = 100.0 if count > 0 else 0.0
+        elif previous_count == 0:
+            conversion_from_previous = 0.0
+        else:
+            conversion_from_previous = (count / previous_count) * 100
+
+        funnel_rows.append(
+            {
+                "Step": step,
+                "Events": count,
+                "Conversion From Previous %": float(conversion_from_previous),
+            }
+        )
+        previous_count = count
+
+    funnel_df = pd.DataFrame(funnel_rows)
+    st.dataframe(funnel_df, width="stretch")
+    st.bar_chart(funnel_df.set_index("Step")["Events"], width="stretch")
 
     st.markdown("### A/B Experimentation")
     with st.form("ab_create_form"):
